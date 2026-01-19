@@ -1,6 +1,6 @@
 #!/bin/zsh
-# V55 Logic Engine (The Wrapper)
-# Handles Context, Local State, Tunneling, and Logging.
+# V55 Logic Engine (The Wrapper) - Fixed Logic
+# Separates Context Logging from Script Execution.
 
 set -o pipefail
 
@@ -34,7 +34,6 @@ if [ ! -d "$TOS_HOME" ]; then
     mkdir -p "$TOS_HOME"
     touch "$INPUT_FILE" "$OUTPUT_FILE" "$LAST_EXIT_FILE" "$LESSONS_FILE"
     echo "AI_USER=team_of_six" > "$CONFIG_FILE"
-    # Files are owned by user naturally
 fi
 
 # Load Config
@@ -61,24 +60,12 @@ if [ -f "$LAST_EXIT_FILE" ]; then
     PREV_EXIT=$(cat "$LAST_EXIT_FILE")
 fi
 
-if [ "$PREV_EXIT" -eq 0 ]; then
-    truncate -s 0 "$OUTPUT_FILE"
-else
-    echo "--- [APPENDING TO LOG: PREVIOUS EXIT $PREV_EXIT] ---" >> "$OUTPUT_FILE"
-fi
-
-# --- EXECUTION ---
-# 1. Half-Silent Doctor
-echo -n "🏥 System Check... "
-if ! sudo -n -u "$AI_USER" git --version >/dev/null 2>&1; then
-    echo "❌ FAILED"
-    echo "    Error: Sudo Tunnel blocked. Check /etc/sudoers.d/team_of_six."
-    exit 1
-fi
-echo "✓"
-
-# 2. Context Injection & Tunnel Execution
+# --- STEP 1: DUMP CONTEXT TO LOG (Do NOT Execute) ---
 {
+    if [ "$PREV_EXIT" -ne 0 ]; then
+        echo "--- [APPENDING TO LOG: PREVIOUS EXIT $PREV_EXIT] ---"
+    fi
+    
     echo "# --- 💎 V55 GEM (IDENTITY) ---"
     cat "$REPO_ROOT/tos_gem.md"
     echo ""
@@ -107,10 +94,33 @@ echo "✓"
     else
         echo "No input provided. Awaiting orders."
     fi
-} | \
+    echo ""
+    echo "# --- 🚀 EXECUTION LOG ---"
+} > "$OUTPUT_FILE"
+
+# --- STEP 2: PREPARE PAYLOAD ---
+# We copy the input script to a temp file that is world-readable
+# so the AI User can execute it without pipe permissions issues.
+TMP_SCRIPT=$(mktemp)
+if [ -s "$INPUT_FILE" ]; then
+    cat "$INPUT_FILE" > "$TMP_SCRIPT"
+else
+    echo "echo 'No input commands to execute.'" > "$TMP_SCRIPT"
+fi
+chmod 644 "$TMP_SCRIPT"
+
+# --- STEP 3: EXECUTE (Sudo) ---
+echo -n "🏥 System Check... "
+if ! sudo -n -u "$AI_USER" git --version >/dev/null 2>&1; then
+    echo "❌ FAILED"
+    echo "    Error: Sudo Tunnel blocked. Check /etc/sudoers.d/team_of_six."
+    rm "$TMP_SCRIPT"
+    exit 1
+fi
+echo "✓"
+
 sudo -u "$AI_USER" zsh -c "
     # TUNNEL DEFINITION (Inside the AI User Shell)
-    # We alias the tools to tunnel BACK to the Real User
     
     # Version Control uses REAL_USER (Local config)
     git() { sudo -u $REAL_USER git \"\$@\"; }
@@ -128,13 +138,16 @@ sudo -u "$AI_USER" zsh -c "
     # MOVE TO TARGET DIRECTORY (CRITICAL)
     cd \"$TARGET_DIR\" || exit 1
 
-    # Run the stream
-    source /dev/stdin
+    # Run the payload
+    source \"$TMP_SCRIPT\"
 " >> "$OUTPUT_FILE" 2>&1
 
 EXIT_CODE=$?
 
-# --- CLEANUP ---
+# Cleanup
+rm -f "$TMP_SCRIPT"
+
+# --- STEP 4: CLEANUP ---
 echo "$EXIT_CODE" > "$LAST_EXIT_FILE"
 
 if [ "$EXIT_CODE" -eq 0 ]; then
