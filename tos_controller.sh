@@ -2,7 +2,8 @@
 # V55 Controller
 # Dispatches commands to the binary logic.
 
-REPO_DIR="$(cd "$(dirname "${(%):-%x}")" && pwd)"
+# FIX: Resolve symlink to find true repo root
+REPO_DIR="$(dirname "$(readlink -f "${(%):-%x}")")"
 BIN_DIR="$REPO_DIR/bin"
 
 COMMAND=$1
