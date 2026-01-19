@@ -1,46 +1,35 @@
-#!/bin/zsh
+# --- V55 INPUT SCRIPT (Standard Shell) ---
+# Context: Scaffolding
+# Target: python_calculator
+# Mode: Direct Write (User Permissions Verified)
 
-# --- Context Setup ---
-# Ensure we know the Real User for file operations
-if [ -z "$REAL_USER" ]; then
-    # Fallback: Assume the owner of the current directory is the target user
-    REAL_USER=$(ls -ld . | awk '{print $3}')
-fi
+# 1. Create Directory Structure
+# Direct execution as 'team_of_six' (Write Access Confirmed)
+mkdir -p python_calculator/src
+mkdir -p python_calculator/tests
+mkdir -p python_calculator/.tos
 
-echo "🔧 Scaffolding Project Structure (User: $REAL_USER)..."
+# 2. Initialize State & Config
+cat <<EOF > python_calculator/README.md
+# Python Calculator
 
-# 1. Create Directories and Modules
-# We use sudo -u $REAL_USER to ensure files are owned by the Architect, not the Ghost.
-sudo -u "$REAL_USER" mkdir -p src tests
-sudo -u "$REAL_USER" touch src/__init__.py
-# Create empty module to allow import (even if empty) to refine the failure to logic errors
-sudo -u "$REAL_USER" touch src/calculator.py
-
-# 2. Write Failing Test (Red Stage)
-# We expect these tests to fail because calculator.py is empty/unimplemented.
-echo "📝 Writing Test Suite to tests/test_calculator.py..."
-sudo -u "$REAL_USER" tee tests/test_calculator.py > /dev/null << 'EOF'
-import pytest
-from src import calculator
-
-def test_add():
-    assert calculator.add(1, 2) == 3
-
-def test_subtract():
-    assert calculator.subtract(5, 3) == 2
-
-def test_multiply():
-    assert calculator.multiply(2, 3) == 6
-
-def test_divide():
-    assert calculator.divide(10, 2) == 5.0
-
-def test_divide_by_zero():
-    with pytest.raises(ValueError):
-        calculator.divide(10, 0)
+A simple, atomic library for basic arithmetic.
 EOF
 
-# 3. Execution (Test Runner)
-echo "🔥 Running Tests (Expect Failure)..."
-# Using the wrapper's pytest alias (which handles the sudo tunnel)
-pytest tests/test_calculator.py || echo "✅ Tests failed as expected (Red Cycle Complete)."
+echo "pytest" > python_calculator/requirements.txt
+
+# 2a. Team of Six State (Setting to RED)
+cat <<EOF > python_calculator/.tos/features.md
+# Features
+* [ ] Basic Calculator (Current)
+EOF
+
+echo "Red" > python_calculator/.tos/state
+touch python_calculator/.tos/objections.md
+
+# 3. Version Control
+# Executes as REAL_USER via tos_wrapper.sh aliases
+cd python_calculator
+git init
+git add .
+git commit -m "chore: project scaffold (Team of Six V55)"
