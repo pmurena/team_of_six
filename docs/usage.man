@@ -1,0 +1,3 @@
+NAME: team_of_six
+SYNOPSIS: team_of_six [wrapper|publish]
+SECURITY: V56 uses a Service Account model. Tokens are injected via standard input.
