@@ -13,7 +13,7 @@ TARGET_DIR="$(pwd)"
 INPUT_ABS="$TOS_DIR/tos_input.sh"
 LOG_ABS="$TOS_DIR/tos_output.log"
 
-# --- STREAMLINED SAFETY BLOCK ---
+# --- STREAMLINED BINARY GATE ---
 if [ ! -d "$TARGET_DIR/.tos" ]; then
     echo "⚠️  PROJECT GATE: .tos/ folder not found in $TARGET_DIR"
     echo -n "Would you like to scaffold a new project here? (y/n): "
@@ -44,24 +44,21 @@ sudo -u "$AI_USER" zsh <<SANDBOX >> "$LOG_ABS" 2>&1
     git config --local user.email "agent@teamofsix.bot"
     git config --local user.name "Team of Six (V56)"
     
-    # 2. Sandbox Hygiene
-    export HOME=\$(mktemp -d -t tos_sandbox.XXXXXXXXXX)
-    
-    # 3. Execution
+    # 2. Execution (Hygiene Removed: Operating directly in environment)
     if [ -f "$INPUT_ABS" ]; then
         source "$INPUT_ABS"
         
-        # --- 4. POST-EXECUTION AUTOMATION ---
+        # --- 3. POST-EXECUTION AUTOMATION ---
         PHASE=\${TOS_PHASE:-"General"}
         REQUEST=\${TOS_REQUEST:-"Manual implementation via tos_input.sh"}
         
-        # 4a. Update Local State
+        # 3a. Update Local State
         if [ -d ".tos" ]; then
             echo "\$PHASE" > ".tos/state"
             echo "📈 Local State updated to: \$PHASE"
         fi
 
-        # 4b. Scaffolding Check (Git)
+        # 3b. Scaffolding Check (Git)
         if [ ! -d ".git" ]; then
             echo "🌱 Initializing git repository..."
             git init
@@ -69,7 +66,7 @@ sudo -u "$AI_USER" zsh <<SANDBOX >> "$LOG_ABS" 2>&1
             git commit -m "chore: initial scaffolding via Team of Six"
         fi
 
-        # 4c. PR Automation
+        # 3c. PR Automation
         BRANCH_NAME="tos/feat-\$(date +%Y%m%d%H%M)"
         git checkout -b "\$BRANCH_NAME"
         git add .
@@ -82,7 +79,6 @@ sudo -u "$AI_USER" zsh <<SANDBOX >> "$LOG_ABS" 2>&1
             fi
         fi
     fi
-    rm -rf "\$HOME"
 SANDBOX
 
 [ $? -eq 0 ] && truncate -s 0 "$INPUT_ABS"
