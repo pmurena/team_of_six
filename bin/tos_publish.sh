@@ -18,16 +18,26 @@ fi
 echo "🚀 Governor: Initiating Sandboxed Publication..."
 
 # [FIXED] Git operations sandboxed under AI_USER
+# [FIXED] Logic re-ordered: Init/Check -> Config -> Action
 sudo -u "$AI_USER" GITHUB_TOKEN="$GITHUB_TOKEN" zsh <<SANDBOX
     cd "$TARGET_DIR"
-    
-    # Git Auth & Identity
+
+    # 1. Ensure Repo Exists
+    if [ ! -d ".git" ]; then
+        echo "🌱 Initializing new repository..."
+        git init -b main
+        IS_NEW=true
+    else
+        IS_NEW=false
+    fi
+
+    # 2. Configure Identity (Now safe as .git exists)
     git config user.name "Team of Six"
     git config user.email "team_of_six@internal"
     git config url."https://x-access-token:\$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
 
-    if [ ! -d ".git" ]; then
-        git init -b main
+    # 3. Execute Actions
+    if [ "\$IS_NEW" = true ]; then
         git add .
         git commit -m "scaff: project genesis"
         REPO_NAME=\$(basename "\$(pwd)")
@@ -40,6 +50,8 @@ sudo -u "$AI_USER" GITHUB_TOKEN="$GITHUB_TOKEN" zsh <<SANDBOX
             git commit -m "feat: updates for state [$CURRENT_STATE]"
             git push origin "\$BRANCH_NAME"
             gh pr create --title "tos: \$BRANCH_NAME" --body "Automated release from state $CURRENT_STATE" --fill
+        else
+            echo "no changes detected"
         fi
     fi
 SANDBOX
