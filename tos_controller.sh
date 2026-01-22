@@ -2,7 +2,6 @@
 # V55 Controller
 # Dispatches commands to the binary logic.
 
-# FIX: Resolve symlink to find true repo root
 REPO_DIR="$(dirname "$(readlink -f "${(%):-%x}")")"
 BIN_DIR="$REPO_DIR/bin"
 
@@ -18,6 +17,9 @@ shift 2>/dev/null || true
 
 # 3. Dispatch known commands or error out
 case "$COMMAND" in
+    new)
+        exec "$BIN_DIR/tos_project_creator.sh" "$@"
+        ;;
     install)
         exec "$BIN_DIR/tos_installer.sh" "$@"
         ;;
@@ -26,6 +28,9 @@ case "$COMMAND" in
         ;;
     publish)
         exec "$BIN_DIR/tos_publish.sh" "$@"
+        ;;
+    new)
+        exec "$BIN_DIR/tos_project_creator.sh" "$@"
         ;;
     uninstall)
         exec "$BIN_DIR/tos_uninstall.sh" "$@"

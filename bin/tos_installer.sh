@@ -1,28 +1,23 @@
 #!/bin/zsh
+# V56 Deployment Script - Permission Wiring
 set -e
+
 AI_USER="team_of_six"
 GROUP="team_of_six"
 REPO_ROOT="$(cd "$(dirname "${(%):-%x}")/.." && pwd)"
-echo "🔧 Installing V56 (Hardened)..."
+REAL_USER=$(whoami)
+
 sudo -v
-getent group "$GROUP" >/dev/null || sudo groupadd "$GROUP"
-id "$AI_USER" &>/dev/null || sudo useradd -r -g "$GROUP" -s /usr/sbin/nologin "$AI_USER"
-sudo usermod -a -G "$GROUP" "$(whoami)"
-TOS_HOME="$HOME/.team_of_six"
-mkdir -p "$TOS_HOME"
-if [ ! -f "$TOS_HOME/.token" ]; then
-    echo -n "🔑 Paste GitHub Token: "
-    read -s UT
-    echo "export GITHUB_TOKEN='$UT'" > "$TOS_HOME/.token"
-    chmod 600 "$TOS_HOME/.token"
-fi
-ln -sf "$REPO_ROOT/tos_controller.sh" "$HOME/.local/bin/team_of_six"
-cat <<CONFIG > "$TOS_HOME/tos_config"
-export AI_USER="$AI_USER"
-export AI_GROUP="$GROUP"
-export REAL_USER="$(whoami)"
-export REPO_ROOT="$REPO_ROOT"
-CONFIG
-touch "$TOS_HOME/tos_input.sh" "$TOS_HOME/tos_output.log"
-chmod 644 "$TOS_HOME/tos_input.sh" 
+if ! getent group "$GROUP" >/dev/null; then sudo groupadd "$GROUP"; fi
+if ! id "$AI_USER" &>/dev/null; then sudo useradd -r -g "$GROUP" -s /bin/zsh "$AI_USER"; fi
+sudo usermod -a -G "$GROUP" "$REAL_USER"
+
+echo "📂 [SUDO] Wiring Permissions..."
+# Repo belongs to Ghost ($AI_USER)
+sudo chown -R "$AI_USER:$GROUP" "$REPO_ROOT"
+sudo chmod -R 775 "$REPO_ROOT"
+# Config belongs to Architect ($REAL_USER)
+sudo chown -R "$REAL_USER:$GROUP" "$HOME/.team_of_six"
+sudo chmod -R 775 "$HOME/.team_of_six"
+
 echo "✅ Installation Complete."
