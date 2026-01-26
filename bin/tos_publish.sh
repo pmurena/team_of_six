@@ -25,9 +25,6 @@ LOCAL_STATE_FILE="$LOCAL_TOS/state"
 LOCAL_OBJECTIONS="$LOCAL_TOS/objections.md"
 
 # --- 1. CONTEXT RESOLUTION ---
-# We are the Ghost. We need to find the Architect's secrets.
-# We rely on REAL_USER being set in tos_config, or we derive it.
-
 # Attempt to load config from known locations to get REAL_USER
 if [ -f "$HOME/.team_of_six/tos_config" ]; then
     source "$HOME/.team_of_six/tos_config"
@@ -35,10 +32,9 @@ elif [ -n "$SUDO_USER" ] && [ -f "/home/$SUDO_USER/.team_of_six/tos_config" ]; t
     source "/home/$SUDO_USER/.team_of_six/tos_config"
 fi
 
-# Fallback derivation if REAL_USER is still empty
+# Fallback derivation
 if [ -z "$REAL_USER" ]; then
-    # Assume the owner of the current directory is the Architect
-    REAL_USER=$(stat -c '%U' "$TARGET_DIR")
+    REAL_USER=$(stat -c '%U' "$TARGET_DIR" 2>/dev/null || echo "pat")
 fi
 
 # Locate the Bridge
@@ -49,7 +45,6 @@ if [ -f "$BRIDGE_DIR/.token" ]; then
     source "$BRIDGE_DIR/.token"
 else
     echo "❌ Error: Could not read token at $BRIDGE_DIR/.token"
-    echo "   Ensure permissions allow read access for 'team_of_six'."
     exit 1
 fi
 
@@ -104,18 +99,22 @@ echo "      📝 Creating PR..."
 gh pr create --title "$MSG" --body "Atomic Release triggered by state: $CURRENT_STATE" --fill
 
 # --- 6. RETROSPECT EXTENSION (Tri-Repo) ---
-if [ "$CURRENT_STATE" == "Retrospect" ]; then
+# [FIX] Changed '==' to '=' for POSIX compatibility
+if [ "$CURRENT_STATE" = "Retrospect" ]; then
     echo "🔄 [Retrospect] Scanning Sibling Repositories..."
-    # Defined relative to the current project
     SIBLINGS=("../llm_agents" "../team_of_six")
     
+    # Pre-calculate absolute target path
+    ABS_TARGET=$(cd "$TARGET_DIR" && pwd -P)
+
     for REPO in "${SIBLINGS[@]}"; do
         if [ -d "$REPO" ]; then
             REPO_NAME=$(basename "$REPO")
             echo "   🔎 Checking $REPO_NAME..."
             
-            # Skip Self
-            if [[ "$(readlink -f "$REPO")" == "$(readlink -f "$TARGET_DIR")" ]]; then
+            # [FIX] Robust Self Check (Inode/Path based)
+            ABS_REPO=$(cd "$REPO" && pwd -P)
+            if [ "$ABS_REPO" = "$ABS_TARGET" ]; then
                 echo "      ✓ Self (Already Processed)."
                 continue
             fi
