@@ -1,2 +1,3 @@
 # 📋 Team of Six Feature Backlog
-* [ ] Initial Setup (Current)
+* [ ] Critical: Add Colocation Validation to 'new' command (tos_project_creator.sh).
+* [ ] Initial Setup (Currentt )
