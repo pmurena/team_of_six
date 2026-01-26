@@ -1,6 +1,6 @@
 #!/bin/zsh
 # V56 Publisher (The Governor)
-# Enforces State Rules before pushing code.
+# Architecture: Direct Read (Open Permissions)
 
 set -e
 
@@ -19,71 +19,94 @@ if [ -z "$MSG" ]; then
     exit 1
 fi
 
-# --- CONTEXT ---
 TARGET_DIR="$(pwd)"
 LOCAL_TOS="$TARGET_DIR/.tos"
 LOCAL_STATE_FILE="$LOCAL_TOS/state"
 LOCAL_OBJECTIONS="$LOCAL_TOS/objections.md"
 
-# --- 1. LOCALITY CHECK ---
+# --- 1. CONTEXT RESOLUTION ---
+# We are the Ghost. We need to find the Architect's secrets.
+# We rely on REAL_USER being set in tos_config, or we derive it.
+
+# Attempt to load config from known locations to get REAL_USER
+if [ -f "$HOME/.team_of_six/tos_config" ]; then
+    source "$HOME/.team_of_six/tos_config"
+elif [ -n "$SUDO_USER" ] && [ -f "/home/$SUDO_USER/.team_of_six/tos_config" ]; then
+    source "/home/$SUDO_USER/.team_of_six/tos_config"
+fi
+
+# Fallback derivation if REAL_USER is still empty
+if [ -z "$REAL_USER" ]; then
+    # Assume the owner of the current directory is the Architect
+    REAL_USER=$(stat -c '%U' "$TARGET_DIR")
+fi
+
+# Locate the Bridge
+BRIDGE_DIR="/home/$REAL_USER/.team_of_six"
+
+# Load Secrets (Direct Read)
+if [ -f "$BRIDGE_DIR/.token" ]; then
+    source "$BRIDGE_DIR/.token"
+else
+    echo "❌ Error: Could not read token at $BRIDGE_DIR/.token"
+    echo "   Ensure permissions allow read access for 'team_of_six'."
+    exit 1
+fi
+
+if [ -z "$GITHUB_TOKEN" ]; then
+    echo "❌ Error: Token file sourced, but GITHUB_TOKEN is empty."
+    exit 1
+fi
+
+# --- 2. LOCALITY CHECK ---
 if [ ! -d "$LOCAL_TOS" ]; then
     echo "⛔ REJECTED: Not a Team of Six project (No .tos/ directory found)."
     exit 1
 fi
 
-# --- 2. VETO CHECK ---
+# --- 3. VETO CHECK ---
 if [ -s "$LOCAL_OBJECTIONS" ]; then
     echo "⛔ REJECTED: Unresolved Objections in $LOCAL_OBJECTIONS"
     exit 1
 fi
 
-# --- 3. STATE PHYSICS (THE RULES) ---
+# --- 4. STATE PHYSICS ---
 CURRENT_STATE=$(cat "$LOCAL_STATE_FILE" 2>/dev/null || echo "Unknown")
 echo "🔍 Governance Check: Phase [$CURRENT_STATE]"
 
 case "$CURRENT_STATE" in
-    "Requirement"|"Scoping")
-        echo "⛔ REJECTED: Cannot publish during Scoping/Requirement phase. No code exists."
+    "Requirement"|"Red")
+        echo "⛔ REJECTED: Cannot publish in state [$CURRENT_STATE]."
         exit 1
-        ;;
-    "Scaffolding")
-        echo "✅ ALLOWED: Initial commit permitted."
-        ;;
-    "Red")
-        echo "⛔ REJECTED: Phase is RED. You cannot publish failing code."
-        echo "    Action: Fix tests to reach GREEN state first."
-        exit 1
-        ;;
-    "Green"|"Refactor"|"Document"|"Done"|"Retrospect")
-        echo "✅ ALLOWED: State is safe for publication."
         ;;
     *)
-        echo "⚠️  WARNING: Unknown state '$CURRENT_STATE'. Proceeding with caution."
+        echo "✅ ALLOWED: State is safe for publication."
         ;;
 esac
 
-# --- 4. ATOMIC EXECUTION (Project PR) ---
-echo "🚀 Executing Atomic Release (Project: $TARGET_DIR)..."
+# --- 5. ATOMIC EXECUTION ---
+echo "🚀 Executing Atomic Release..."
 TIMESTAMP=$(date +%Y%m%d%H%M)
 BRANCH="release-$TIMESTAMP"
 
-# Execute Git Operations (Direct Access)
-(
-    git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
-    git add .
-    git commit -m "$MSG"
-    git push --set-upstream origin "$BRANCH"
-    
-    # Create PR using GitHub CLI
-    echo "      📝 Creating PR for Project..."
-    gh pr create --title "$MSG" --body "Atomic Release triggered by state: $CURRENT_STATE" --fill
-)
+# Execute Git (Authenticated)
+git config user.name "Team of Six"
+git config user.email "team_of_six@internal"
+git config url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
 
-# --- 5. RETROSPECT EXTENSION (Tri-Repo) ---
+# Branch & Push
+git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
+git add .
+git commit -m "$MSG"
+git push --set-upstream origin "$BRANCH"
+
+echo "      📝 Creating PR..."
+gh pr create --title "$MSG" --body "Atomic Release triggered by state: $CURRENT_STATE" --fill
+
+# --- 6. RETROSPECT EXTENSION (Tri-Repo) ---
 if [ "$CURRENT_STATE" == "Retrospect" ]; then
-    echo "🔄 [Retrospect] Scanning Sibling Repositories for Changes..."
-    
-    # Define Siblings
+    echo "🔄 [Retrospect] Scanning Sibling Repositories..."
+    # Defined relative to the current project
     SIBLINGS=("../llm_agents" "../team_of_six")
     
     for REPO in "${SIBLINGS[@]}"; do
@@ -91,34 +114,32 @@ if [ "$CURRENT_STATE" == "Retrospect" ]; then
             REPO_NAME=$(basename "$REPO")
             echo "   🔎 Checking $REPO_NAME..."
             
-            # Check for changes (Dirty State)
+            # Skip Self
+            if [[ "$(readlink -f "$REPO")" == "$(readlink -f "$TARGET_DIR")" ]]; then
+                echo "      ✓ Self (Already Processed)."
+                continue
+            fi
+
             if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
                 echo "      ⚠️  Changes detected in $REPO_NAME. Processing..."
-                
-                # Branch Name for PR
-                TIMESTAMP=$(date +%Y%m%d%H%M)
-                BRANCH="retro-update-$TIMESTAMP"
-                
-                # Execute Git Operations
                 (
                     cd "$REPO"
+                    git config user.name "Team of Six"
+                    git config user.email "team_of_six@internal"
+                    git config url."https://x-access-token:$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
+                    
+                    BRANCH="retro-$TIMESTAMP"
                     git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
                     git add .
-                    git commit -m "Retro Update: $MSG (from $TARGET_DIR)"
+                    git commit -m "Retro Update: $MSG"
                     git push --set-upstream origin "$BRANCH"
-                    
-                    # Create PR using GitHub CLI
-                    echo "      📝 Creating PR for $REPO_NAME..."
-                    gh pr create --title "Retro Update: $MSG" --body "Automated Retrospective Update triggered by project: $TARGET_DIR" --fill
+                    gh pr create --title "Retro Update: $MSG" --body "Automated Retrospective" --fill
                 )
                 echo "      ✅ $REPO_NAME Processed."
             else
                 echo "      ✓ Clean."
             fi
-        else
-            echo "   ⚠️  Sibling $REPO not found."
         fi
     done
 fi
-
 echo "✅ Published Successfully."

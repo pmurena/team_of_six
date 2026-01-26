@@ -9,10 +9,36 @@ The **Team of Six** ($AI_USER) is a persistent DevOps agent that operates alongs
 * **The Interface:** The Architect has Read-Only access to these sandboxes for verification.
 * **Review Flow:** All code changes flow via **Pull Requests (PRs)** from the Sandbox to the Architect's Repo Clone.
 
-## Architecture
-* **Repo:** `/mnt/storage/team_of_six`
-* **Execution:** `team_of_six wrapper` or `team_of_six publish`
+## ⚡ Commands
 
-## Usage
-    cd ~/my_project
-    team_of_six wrapper --input ~/.team_of_six/tos_input.sh
+### `new` (Project Creation)
+Initializes a new Team of Six project with V56 scaffolding.
+
+```bash
+team_of_six new <project_name>
+```
+
+**Constraint (Tri-Repo Topology):**
+This command **MUST** be run in the "Zone Root" (the parent directory containing the `team_of_six` and `llm_agents` repositories).
+* ✅ Valid: `~/code/team_of_six`, `~/code/llm_agents` -> Run in `~/code`
+* ⛔ Invalid: `~/code/random_folder` (Missing siblings)
+
+### `wrapper` (Execution)
+Runs the Ghost Engine to process `tos_input.sh`.
+
+```bash
+cd <project_name>
+team_of_six wrapper
+```
+
+### `publish` (Governance)
+Pushes code to the origin and creates a Pull Request.
+
+```bash
+cd <project_name>
+team_of_six publish -m "feat: description"
+```
+
+## 🏗️ Architecture
+* **Repo:** `~/.team_of_six` (Config), Project Dirs (Data)
+* **Execution:** `team_of_six wrapper`
