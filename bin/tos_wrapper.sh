@@ -1,31 +1,25 @@
 #!/bin/zsh
-# Team of Six - Wrapper V56 (Engine Only)
-set -o pipefail
+# Team of Six - V56 Secure Wrapper
+# Bridges Architect input to the Homeless Ghost context.
 
-HOST_HOME="$HOME"
-TOS_DIR="$HOST_HOME/.team_of_six"
-source "$TOS_DIR/tos_config" || exit 1
+TOS_CONFIG="$HOME/.team_of_six/tos_config"
+TOS_TOKEN="$HOME/.team_of_six/.token"
 
-TARGET_DIR="$(pwd)"
-INPUT_ABS="$TOS_DIR/tos_input.sh"
-LOG_ABS="$TOS_DIR/tos_output.log"
-
-if [ ! -d "$TARGET_DIR/.tos" ]; then
-    echo "⛔ ERROR: .tos/ context missing."
+if [ ! -f "$TOS_CONFIG" ] || [ ! -f "$TOS_TOKEN" ]; then
+    echo "❌ Error: TOS configuration not found. Run installer first."
     exit 1
 fi
 
-echo "# --- ⚡ TASK INPUT --- $(date)" >> "$LOG_ABS"
-cat "$INPUT_ABS" >> "$LOG_ABS"
+source "$TOS_CONFIG"
+source "$TOS_TOKEN"
 
-# Execute logic as AI_USER (Air-Gapped)
-sudo -u "$AI_USER" zsh <<SANDBOX >> "$LOG_ABS" 2>&1
-    cd "$TARGET_DIR" || exit 1
-    if [ -s "$INPUT_ABS" ]; then
-        source "$INPUT_ABS"
-    fi
-SANDBOX
+# Export critical env for the homeless ghost
+export GH_TOKEN=$GITHUB_TOKEN
+export HOME=/tmp
 
-EXIT_CODE=$?
-[ $EXIT_CODE -eq 0 ] && truncate -s 0 "$INPUT_ABS"
-exit $EXIT_CODE
+if [[ "$1" == "--input" ]]; then
+    INPUT_FILE="$2"
+    sudo -u "$AI_USER" zsh -c "source $TOS_TOKEN; export GH_TOKEN=\$GITHUB_TOKEN; export HOME=/tmp; zsh" < "$INPUT_FILE"
+else
+    sudo -u "$AI_USER" zsh -c "source $TOS_TOKEN; export GH_TOKEN=\$GITHUB_TOKEN; export HOME=/tmp; $*"
+fi

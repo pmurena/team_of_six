@@ -1,43 +1,36 @@
 #!/bin/zsh
-# V55 Controller
-# Dispatches commands to the binary logic.
+# Team of Six - V56 Global Controller
+# High-level Architect interface.
 
-REPO_DIR="$(dirname "$(readlink -f "${(%):-%x}")")"
-BIN_DIR="$REPO_DIR/bin"
+TOS_CONFIG="$HOME/.team_of_six/tos_config"
+TOS_TOKEN="$HOME/.team_of_six/.token"
 
-COMMAND=$1
-
-# 1. Handle "No Parameters" case first
-if [ -z "$COMMAND" ]; then
-    exec "$BIN_DIR/tos_wrapper.sh"
+if [ ! -f "$TOS_CONFIG" ] || [ ! -f "$TOS_TOKEN" ]; then
+    echo "❌ Error: V56 configuration missing."
+    exit 1
 fi
 
-# 2. Shift if there are arguments to pass along
-shift 2>/dev/null || true 
+source "$TOS_CONFIG"
+source "$TOS_TOKEN"
 
-# 3. Dispatch known commands or error out
-case "$COMMAND" in
-    new)
-        exec "$BIN_DIR/tos_project_creator.sh" "$@"
+# Anchor Ghost Environment
+export HOME=/tmp
+export GH_TOKEN=$GITHUB_TOKEN
+
+case "$1" in
+    "wrapper")
+        shift
+        $REPO_ROOT/bin/tos_wrapper.sh "$@"
         ;;
-    install)
-        exec "$BIN_DIR/tos_installer.sh" "$@"
+    "new")
+        shift
+        sudo -u "$AI_USER" zsh -c "export GH_TOKEN=$GITHUB_TOKEN; export HOME=/tmp; $REPO_ROOT/bin/tos_project_creator.sh $*"
         ;;
-    wrapper)
-        exec "$BIN_DIR/tos_wrapper.sh" "$@"
+    "publish")
+        shift
+        sudo -u "$AI_USER" zsh -c "export GH_TOKEN=$GITHUB_TOKEN; export HOME=/tmp; cd $(pwd) && $REPO_ROOT/bin/tos_publish.sh $*"
         ;;
-    publish)
-        exec "$BIN_DIR/tos_publish.sh" "$@"
-        ;;
-    new)
-        exec "$BIN_DIR/tos_project_creator.sh" "$@"
-        ;;
-    uninstall)
-        exec "$BIN_DIR/tos_uninstall.sh" "$@"
-        ;;
-   *)
-        echo "Error: Unknown command '$COMMAND'" >&2
-        echo "Usage: team_of_six [install|wrapper|publish|uninstall]" >&2
-        exit 1
+    *)
+        echo "Usage: team_of_six [wrapper|new|publish] ..."
         ;;
 esac
