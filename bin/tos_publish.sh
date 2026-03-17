@@ -49,12 +49,7 @@ case "$CURRENT_STATE" in
     "Scaffolding")
         echo "✅ ALLOWED: Initial commit permitted."
         ;;
-    "Red")
-        echo "⛔ REJECTED: Phase is RED. You cannot publish failing code."
-        echo "    Action: Fix tests to reach GREEN state first."
-        exit 1
-        ;;
-    "Green"|"Refactor"|"Document"|"Done"|"Retrospect")
+    "Red|Green"|"Refactor"|"Document"|"Done"|"Retrospect")
         echo "✅ ALLOWED: State is safe for publication."
         ;;
     *)

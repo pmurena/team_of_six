@@ -1,3 +1,4 @@
+cat << 'EOF' | tee tos_controller.sh > /dev/null
 #!/bin/zsh
 # Team of Six - V56 Global Controller
 # High-level Architect interface.
@@ -32,3 +33,4 @@ case "$1" in
         echo "Usage: team_of_six [wrapper|new|publish] ..."
         ;;
 esac
+EOF
