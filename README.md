@@ -1,18 +1,19 @@
-# Team of Six (V56)
+# 💎 Team of Six (V57 GitOps Edition)
 
-## 👑 Identity: The System Ghost
-The **Team of Six** ($AI_USER) is a persistent DevOps agent that operates alongside the Architect ($REAL_USER).
+## 🏗️ Architecture (V57)
+* **Ghost Ownership:** The `AI_USER` owns the repository to prevent permission leakage.
+* **The Mutex Lock:** The wrapper and publisher use `.tos/commit_msg` and `.tos/pr_summary.md` to guarantee that code is published and GitHub PRs are updated before new work begins.
+* **GitOps Review:** PR rejections happen natively on GitHub. Failing tests (`Red` state) are published immediately to ensure the contract is agreed upon before implementation.
 
-## 🛡️ Operational Security
-* **Tri-Repo Topology:** Projects are colocated with `llm_agents` and `team_of_six`.
-* **The Sandbox Protocol:** The Ghost operates in pure sandboxes ($AI_USER folders).
-* **The Interface:** The Architect has Read-Only access to these sandboxes for verification.
-* **Review Flow:** All code changes flow via **Pull Requests (PRs)** from the Sandbox to the Architect's Repo Clone.
+## ⚡ Usage
+**1. Execute AI Logic:**
+```zsh
+team_of_six wrapper
+```
+*(Fails if previous work is unpublished).*
 
-## Architecture
-* **Repo:** `/mnt/storage/team_of_six`
-* **Execution:** `team_of_six wrapper` or `team_of_six publish`
-
-## Usage
-    cd ~/my_project
-    team_of_six wrapper --input ~/.team_of_six/tos_input.sh
+**2. Publish & Sync:**
+```zsh
+team_of_six publish
+```
+*(Fails if AI forgot to provide commit message/summary. Automatically updates GitHub PRs).*
