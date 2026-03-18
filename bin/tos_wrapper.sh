@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Team of Six - Wrapper V57 (With Mutex Lock)
+# Team of Six - Wrapper V58
 set -o pipefail
 
 HOST_HOME="$HOME"
@@ -10,18 +10,18 @@ TARGET_DIR="$(pwd)"
 INPUT_ABS="$TOS_DIR/tos_input.sh"
 LOG_ABS="$TOS_DIR/tos_output.log"
 
-COMMIT_FILE="$TARGET_DIR/.tos/commit_msg"
-SUMMARY_FILE="$TARGET_DIR/.tos/pr_summary.md"
+TITLE_FILE="$TARGET_DIR/.tos/title"
+BODY_FILE="$TARGET_DIR/.tos/body"
 
 if [ ! -d "$TARGET_DIR/.tos" ]; then
     echo "⛔ ERROR: .tos/ context missing."
     exit 1
 fi
 
-# [V57 MUTEX] Enforce that previous work was published
-if [ -s "$COMMIT_FILE" ] || [ -s "$SUMMARY_FILE" ]; then
+# [V58 MUTEX]
+if [ -s "$TITLE_FILE" ] || [ -s "$BODY_FILE" ]; then
     echo "⛔ EXECUTION BLOCKED: Unpublished state detected."
-    echo "The AI has already prepared a commit. You must run 'team_of_six publish' to push the existing code to GitHub before assigning a new task."
+    echo "The AI has already prepared an output. It must be published to GitHub before assigning a new task."
     exit 1
 fi
 
