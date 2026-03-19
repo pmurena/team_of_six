@@ -1,83 +1,78 @@
 #!/bin/zsh
-# Team of Six - Publisher V58 (The Governor)
+# Team of Six - Publisher V62.5 (Thin Client)
 set -e
 
-TOS_DIR="$HOME/.team_of_six"
-source "$TOS_DIR/tos_config"
-source "$TOS_DIR/.token" || { echo "❌ GITHUB_TOKEN missing"; exit 1; }
-
-TARGET_DIR="$(pwd)"
-
-HAS_REF=false;    [ -s "$TARGET_DIR/.tos/ref" ] && HAS_REF=true
-HAS_BRANCH=false; [ -s "$TARGET_DIR/.tos/branch" ] && HAS_BRANCH=true
-HAS_TITLE=false;  [ -s "$TARGET_DIR/.tos/title" ] && HAS_TITLE=true
-HAS_BODY=false;   [ -s "$TARGET_DIR/.tos/body" ] && HAS_BODY=true
-
-if [ "$HAS_BODY" = false ]; then
-    echo "⛔ PUBLISH FAILED: Missing .tos/body. The AI must provide context for the action."
+if [ -z "$TOS_CONF" ]; then
+    echo "⛔ ERROR: TOS_CONF not set. Publisher must be executed via tos_controller.sh"
     exit 1
 fi
 
-echo "🚀 Governor: Evaluating State & Routing to GitHub..."
+echo "🚀 Governor: Scanning Outbox ($TOS_OUTBOX)..."
 
-sudo -u "$AI_USER" GITHUB_TOKEN="$GITHUB_TOKEN" zsh <<SANDBOX
-    cd "$TARGET_DIR"
-    BODY=\$(cat .tos/body)
+sudo -u "$AI_USER" GITHUB_TOKEN="$TOS_GITHUB_TOKEN" zsh <<SANDBOX
+    export TOS_SANDBOX="$TOS_SANDBOX"
+    export TOS_OUTBOX="$TOS_OUTBOX"
+    
+    git config --global user.name "Team of Six"
+    git config --global user.email "team_of_six@internal"
+    git config --global url."https://x-access-token:\$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
 
-    # Git Auth
-    git config user.name "Team of Six"
-    git config user.email "team_of_six@internal"
-    git config url."https://x-access-token:\$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
+    ERRORS_OCCURRED=false
+    PAYLOADS_FOUND=false
 
-    # --- 1. CODEBASE MODIFICATION (PR ROUTE) ---
-    if [ "$HAS_BRANCH" = true ]; then
-        if [ "$HAS_TITLE" = false ]; then
-            echo "⛔ PUBLISH FAILED: Code changes require a .tos/title for the commit message."
-            exit 1
-        fi
-        
-        BRANCH=\$(cat .tos/branch)
-        TITLE=\$(cat .tos/title)
+    for PROJECT_DIR in "\$TOS_OUTBOX"/*(/N); do
+        PROJECT_NAME=\$(basename "\$PROJECT_DIR")
+        for PAYLOAD in "\$PROJECT_DIR"/*(/N); do
+            PAYLOADS_FOUND=true
+            echo "\n📦 Processing: [\$PROJECT_NAME] -> \$(basename "\$PAYLOAD")"
+            
+            HAS_REF=false;     [ -s "\$PAYLOAD/ref" ] && HAS_REF=true
+            HAS_BRANCH=false;  [ -s "\$PAYLOAD/branch" ] && HAS_BRANCH=true
+            HAS_TITLE=false;   [ -s "\$PAYLOAD/title" ] && HAS_TITLE=true
+            HAS_BODY=false;    [ -s "\$PAYLOAD/body" ] && HAS_BODY=true
 
-        echo "📦 Branch detected. Committing and pushing..."
-        git checkout -B "\$BRANCH"
-        git add .
-        git commit -m "\$TITLE" -m "\$BODY"
-        git push -u origin "\$BRANCH"
-
-        if [ "$HAS_REF" = true ]; then
-            REF=\$(cat .tos/ref)
-            echo "💬 Updating PR #\$REF..."
-            gh pr comment "\$REF" --body "\$BODY"
-        else
-            echo "✨ Creating new Pull Request..."
-            NEW_REF=\$(gh pr create --title "\$TITLE" --body "\$BODY" --head "\$BRANCH" | grep -oE '[0-9]+$')
-            echo "\$NEW_REF" > .tos/ref
-        fi
-
-    # --- 2. DISCUSSION ONLY (ISSUE ROUTE) ---
-    else
-        echo "📝 No branch detected. Routing to GitHub Issues..."
-        if [ "$HAS_REF" = true ]; then
-            REF=\$(cat .tos/ref)
-            echo "💬 Commenting on Issue #\$REF..."
-            gh issue comment "\$REF" --body "\$BODY"
-        else
-            if [ "$HAS_TITLE" = false ]; then
-                echo "⛔ PUBLISH FAILED: Creating a new issue requires a .tos/title."
-                exit 1
+            if [ "\$HAS_BODY" = false ] || [ "\$HAS_TITLE" = false ]; then
+                echo "⛔ PUBLISH FAILED: Missing title or body."
+                ERRORS_OCCURRED=true
+                continue
             fi
-            echo "✨ Creating new Issue..."
-            NEW_REF=\$(gh issue create --title "\$TITLE" --body "\$BODY" | grep -oE '[0-9]+$')
-            echo "\$NEW_REF" > .tos/ref
-        fi
-    fi
+
+            BODY=\$(cat "\$PAYLOAD/body")
+            TITLE=\$(cat "\$PAYLOAD/title")
+
+            if [ ! -d "\$TOS_SANDBOX/\$PROJECT_NAME" ]; then
+                echo "⛔ PUBLISH FAILED: Sandbox directory missing."
+                ERRORS_OCCURRED=true
+                continue
+            fi
+            
+            cd "\$TOS_SANDBOX/\$PROJECT_NAME"
+
+            if [ "\$HAS_BRANCH" = true ]; then
+                BRANCH=\$(cat "\$PAYLOAD/branch")
+                git checkout -B "\$BRANCH"
+                git add .
+                git commit -m "\$TITLE" -m "\$BODY"
+                git push -u origin "\$BRANCH"
+
+                if [ "\$HAS_REF" = true ]; then
+                    REF=\$(cat "\$PAYLOAD/ref")
+                    gh pr comment "\$REF" --body "\$BODY"
+                else
+                    NEW_REF=\$(gh pr create --title "\$TITLE" --body "\$BODY" --head "\$BRANCH" | grep -oE '[0-9]+$')
+                fi
+            else
+                if [ "\$HAS_REF" = true ]; then
+                    REF=\$(cat "\$PAYLOAD/ref")
+                    gh issue comment "\$REF" --body "\$BODY"
+                else
+                    NEW_REF=\$(gh issue create --title "\$TITLE" --body "\$BODY" | grep -oE '[0-9]+$')
+                fi
+            fi
+            rm -rf "\$PAYLOAD"
+        done
+        rmdir "\$PROJECT_DIR" 2>/dev/null || true
+    done
+
+    if [ "\$ERRORS_OCCURRED" = true ]; then exit 1; fi
 SANDBOX
-
-# Unlock Mutex
-> "$TARGET_DIR/.tos/title"
-> "$TARGET_DIR/.tos/body"
-# Clean up legacy V57 files if they exist
-rm -f "$TARGET_DIR/.tos/commit_msg" "$TARGET_DIR/.tos/pr_summary.md" 2>/dev/null
-
-echo "✅ Published & Synced to GitHub. Sandbox unlocked for next task."

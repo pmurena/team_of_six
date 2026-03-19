@@ -1,37 +1,38 @@
 #!/bin/zsh
-# Team of Six - Global Controller V58
+# Team of Six - Global Controller V62.5 (XDG & CLI Config)
 
-TOS_CONFIG="$HOME/.team_of_six/tos_config"
-TOS_TOKEN="$HOME/.team_of_six/.token"
-REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+export TOS_CONF="$HOME/.config/team_of_six"
 
-if [ ! -f "$TOS_CONFIG" ] || [ ! -f "$TOS_TOKEN" ]; then
-    echo "❌ Error: V58 configuration missing."
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -c|--config) export TOS_CONF="$2"; shift 2 ;;
+        *) break ;;
+    esac
+done
+
+# Updated to look for 'conf' instead of 'tos_config'
+if [ ! -f "$TOS_CONF/conf" ] || [ ! -f "$TOS_CONF/.token" ]; then
+    echo "❌ Error: Configuration missing in $TOS_CONF."
     exit 1
 fi
 
-source "$TOS_CONFIG"
-source "$TOS_TOKEN"
-export GH_TOKEN=$GITHUB_TOKEN
+source "$TOS_CONF/conf"
+export TOS_GITHUB_TOKEN=$(cat "$TOS_CONF/.token" | tr -d '\n\r ')
 
-case "$1" in
-    "wrapper")
-        shift
-        "$REPO_ROOT/bin/tos_wrapper.sh" "$@"
-        ;;
-    "publish")
-        shift
-        "$REPO_ROOT/bin/tos_publish.sh" "$@"
-        ;;
-    "new")
-        shift
-        "$REPO_ROOT/bin/tos_project_creator.sh" "$@"
-        ;;
-    "")
-        echo "🔄 Executing Unified Loop (Wrapper -> Publish)..."
-        "$REPO_ROOT/bin/tos_wrapper.sh" && "$REPO_ROOT/bin/tos_publish.sh"
-        ;;
-    *)
-        echo "Usage: team_of_six [wrapper|new|publish] or run without args for unified loop."
-        ;;
+if [ -z "$TOS_SANDBOX" ] || [ -z "$TOS_BIN" ]; then
+    echo "❌ Error: TOS_SANDBOX or TOS_BIN is not defined in conf."
+    exit 1
+fi
+
+cd "$TOS_SANDBOX" || exit 1
+
+CMD="$1"
+shift || true
+
+case "$CMD" in
+    "wrapper") "$TOS_BIN/tos_wrapper.sh" "$@" ;;
+    "publish") "$TOS_BIN/tos_publish.sh" "$@" ;;
+    "new")     "$TOS_BIN/tos_project_creator.sh" "$@" ;;
+    "")        echo "🔄 Executing Unified Loop..."; "$TOS_BIN/tos_wrapper.sh" && "$TOS_BIN/tos_publish.sh" ;;
+    *)         echo "Usage: team_of_six [-c <config_dir>] [wrapper|new|publish]" ;;
 esac
