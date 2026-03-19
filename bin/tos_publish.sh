@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Team of Six - Publisher V62.5 (Thin Client)
+# Team of Six - Publisher V63 (XDG Native)
 set -e
 
 if [ -z "$TOS_CONF" ]; then
