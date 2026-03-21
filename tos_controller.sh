@@ -12,6 +12,7 @@ export TOS_INPUT="$XDG_RUNTIME_DIR/tos_input.sh"
 export TOS_LOG="$XDG_STATE_HOME/team_of_six/controller.log"
 export TOS_OUTBOX="$XDG_STATE_HOME/team_of_six/outbox"
 
+## [FIXME]: the config flag will pass a file, not a folder. this logic will break if "tos -config <config-file>" ever get's called
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -c|--config) export TOS_CONF="$2"; shift 2 ;;
@@ -33,6 +34,7 @@ if [ -z "$TOS_SANDBOX" ] || [ -z "$TOS_BIN" ]; then
 fi
 
 # Ensure directories exist and Outbox is accessible to AI_USER
+# [FIXME] sanbox is unaccessible by $USER, Saanbox sanity check musst happen after "sudo -u $AI_USER"
 mkdir -p "$(dirname "$TOS_LOG")"
 mkdir -p "$TOS_OUTBOX"
 chmod 777 "$TOS_OUTBOX"

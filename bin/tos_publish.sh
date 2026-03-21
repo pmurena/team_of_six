@@ -12,10 +12,17 @@ echo "🚀 Governor: Scanning Outbox ($TOS_OUTBOX)..."
 sudo -u "$AI_USER" GITHUB_TOKEN="$TOS_GITHUB_TOKEN" zsh <<SANDBOX
     export TOS_SANDBOX="$TOS_SANDBOX"
     export TOS_OUTBOX="$TOS_OUTBOX"
+    # 1. Provide a writable home for the "Homeless Ghost"
+    export HOME=/tmp/tos_ghost_$(date +%s)
+    mkdir -p "$HOME"
+
+    # 2. Proceed with Git operations
+    cd "$TOS_SANDBOX/$PROJECT_NAME"
     
-    git config --global user.name "Team of Six"
-    git config --global user.email "team_of_six@internal"
-    git config --global url."https://x-access-token:\$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
+    # Using --local is still safer to avoid any global lock attempts
+    git config --local user.name "Team of Six"
+    git config --local user.email "team_of_six@internal" 
+    git config --local url. "https://x-access-token:\$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
 
     ERRORS_OCCURRED=false
     PAYLOADS_FOUND=false
