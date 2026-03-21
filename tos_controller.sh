@@ -1,55 +1,45 @@
 #!/bin/zsh
-# Team of Six - Global Controller V63 (XDG Native)
+# Team of Six - Global Controller V64 (Absolute Identity)
 
-# 1. Resolve XDG Base Directories (with fallbacks)
+# 1. Resolve Environment (Architect Context)
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export XDG_STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 
-# 2. Define System Paths
 export TOS_CONF="$XDG_CONFIG_HOME/team_of_six"
-export TOS_INPUT="$XDG_RUNTIME_DIR/tos_input.sh"
 export TOS_LOG="$XDG_STATE_HOME/team_of_six/controller.log"
 export TOS_OUTBOX="$XDG_STATE_HOME/team_of_six/outbox"
+export TOS_INPUT="$XDG_RUNTIME_DIR/tos_input.sh"
 
-## [FIXME]: the config flag will pass a file, not a folder. this logic will break if "tos -config <config-file>" ever get's called
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        -c|--config) export TOS_CONF="$2"; shift 2 ;;
-        *) break ;;
-    esac
-done
-
-if [ ! -f "$TOS_CONF/conf" ] || [ ! -f "$TOS_CONF/.token" ]; then
-    echo "❌ Error: Configuration missing in $TOS_CONF."
-    exit 1
-fi
-
+# 2. Validation
+[ ! -f "$TOS_CONF/conf" ] && { echo "❌ Config missing: $TOS_CONF/conf"; exit 1; }
 source "$TOS_CONF/conf"
 export TOS_GITHUB_TOKEN=$(cat "$TOS_CONF/.token" | tr -d '\n\r ')
 
-if [ -z "$TOS_SANDBOX" ] || [ -z "$TOS_BIN" ]; then
-    echo "❌ Error: TOS_SANDBOX or TOS_BIN is not defined in conf."
-    exit 1
-fi
+# 3. Path Lockdown
+mkdir -p "$TOS_OUTBOX" "$TOS_SANDBOX" "$(dirname "$TOS_LOG")"
+chmod 777 "$TOS_OUTBOX" # Ensure AI_USER can write payloads
 
-# Ensure directories exist and Outbox is accessible to AI_USER
-# [FIXME] sanbox is unaccessible by $USER, Saanbox sanity check musst happen after "sudo -u $AI_USER"
-mkdir -p "$(dirname "$TOS_LOG")"
-mkdir -p "$TOS_OUTBOX"
-chmod 777 "$TOS_OUTBOX"
-touch "$TOS_INPUT"
+# 4. The Unified Execution Bridge
+# We CD to the sandbox HERE to prevent root-relative errors
+cd "$TOS_SANDBOX" || { echo "❌ Failed to enter sandbox: $TOS_SANDBOX"; exit 1; }
 
-cd "$TOS_SANDBOX" || exit 1
+# We pass ALL critical variables explicitly to the sudo shell
+run_as_ghost() {
+    sudo -u "$AI_USER" \
+        TOS_SANDBOX="$TOS_SANDBOX" \
+        TOS_OUTBOX="$TOS_OUTBOX" \
+        TOS_LOG="$TOS_LOG" \
+        TOS_INPUT="$TOS_INPUT" \
+        GITHUB_TOKEN="$TOS_GITHUB_TOKEN" \
+        zsh -c "export HOME=/tmp/tos_ghost; mkdir -p \$HOME; source $1"
+}
 
-CMD="$1"
-# Only shift if arguments exist to prevent shift count error
-[[ $# -gt 0 ]] && shift
-
-case "$CMD" in
-    "wrapper") "$TOS_BIN/tos_wrapper.sh" "$@" ;;
-    "publish") "$TOS_BIN/tos_publish.sh" "$@" ;;
+case "$1" in
+    "wrapper") run_as_ghost "$TOS_BIN/tos_wrapper.sh" ;;
+    "publish") run_as_ghost "$TOS_BIN/tos_publish.sh" ;;
     "new")     "$TOS_BIN/tos_project_creator.sh" "$@" ;;
-    "")        echo "🔄 Executing Unified Loop..."; "$TOS_BIN/tos_wrapper.sh" && "$TOS_BIN/tos_publish.sh" ;;
-    *)         echo "Usage: team_of_six [-c <config_dir>] [wrapper|new|publish]" ;;
+    "")        run_as_ghost "$TOS_BIN/tos_wrapper.sh" && run_as_ghost "$TOS_BIN/tos_publish.sh" ;;
+    *)         echo "Usage: team_of_six [wrapper|publish|new]" ;;
 esac
+
