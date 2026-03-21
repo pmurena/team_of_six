@@ -3,7 +3,7 @@
 # Purpose: Generate a full state report for debugging permission/path issues.
 
 DUMP_DIR="/tmp/tos_dump_$(date +%s)"
-DUMP_FILE="$HOME/tos_report_$(date +%Y%m%d).tar.gz"
+DUMP_FILE="$HOME/docs/tos_report_$(date +%Y%m%d).tar.gz"
 
 mkdir -p "$DUMP_DIR"
 echo "🔍 Starting Team of Six Runtime Dump..."
