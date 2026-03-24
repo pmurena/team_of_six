@@ -1,0 +1,7 @@
+export TOS_MNT_ROOT="/mnt/team-of-six"
+export TOS_SANDBOX="$TOS_MNT_ROOT/sandbox"
+export TOS_LOCAL="$TOS_MNT_ROOT/.local"
+export TOS_BIN="$TOS_LOCAL/bin"
+export TOS_CONF="$TOS_LOCAL/conf"
+export TOS_OUTBOX="$TOS_SANDBOX/.tos_outbox"
+export AI_USER="team_of_six"

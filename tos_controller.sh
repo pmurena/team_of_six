@@ -1,50 +1,44 @@
 #!/bin/zsh
-# Team of Six - Global Controller V64.3 (Total Isolation)
+# Team of Six - Global Controller V64 (FHS Container)
 
-# 1. Resolve Environment (Architect Context)
-export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export TOS_SANDBOX="${TOS_SANDBOX:-/var/lib/tos_sandbox}"
+export TOS_CONF="$TOS_SANDBOX/.tos"
 
-# Static Runtime Path (Repo #3)
+# 1. Source Sandbox Config (Zero Context Switch)
+if [ -f "$TOS_CONF/config" ]; then
+    source "$TOS_CONF/config"
+else
+    echo "❌ ERROR: Config missing at $TOS_CONF/config"
+    exit 1
+fi
+
+export TOS_GITHUB_TOKEN=$(cat "$TOS_CONF/.token" 2>/dev/null | tr -d '\n\r ')
+
+# 2. Hardcoded FHS Paths
 export TOS_BIN="/opt/team_of_six/bin"
+export TOS_IPC="/run/team_of_six"
+export TOS_INPUT="$TOS_IPC/tos_input.sh"
+export TOS_LOG="$TOS_IPC/controller.log"
+export TOS_OUTBOX="$TOS_CONF/outbox"
+export AI_USER="team_of_six"
 
-# --- THE FIX: Move State out of /home/pat ---
-# We point these to the mount and /tmp so the Ghost has native access
-export TOS_OUTBOX="/mnt/team_of_six/.tos/outbox"
-export TOS_SANDBOX="/mnt/team_of_six/team_of_six"
-export TOS_LOG="/mnt/team_of_six/.tos/controller.log" 
-export TOS_INPUT="/tmp/tos_input.sh" 
-# --------------------------------------------
+# 3. IPC Provisioning (Volatile)
+if [ ! -d "$TOS_IPC" ]; then
+    sudo mkdir -p "$TOS_IPC"
+    sudo chown "$USER:$AI_USER" "$TOS_IPC"
+    sudo chmod 775 "$TOS_IPC"
+fi
+touch "$TOS_INPUT" "$TOS_LOG" && chmod 666 "$TOS_INPUT" "$TOS_LOG"
 
-export TOS_CONF="$XDG_CONFIG_HOME/team_of_six"
+# 4. Execution
+cd "$TOS_SANDBOX" || exit 1
+CMD="$1"
+[[ $# -gt 0 ]] && shift
 
-# 2. Validation & Token Extraction
-[ ! -f "$TOS_CONF/conf" ] && { echo "❌ Config missing: $TOS_CONF/conf"; exit 1; }
-source "$TOS_CONF/conf"
-[ -f "$TOS_CONF/.token" ] && export TOS_GITHUB_TOKEN=$(cat "$TOS_CONF/.token" | tr -d '\n\r ')
-
-# 3. The Unified Execution Bridge
-run_as_ghost() {
-    sudo -u "$AI_USER" \
-        TOS_BIN="$TOS_BIN" \
-        TOS_SANDBOX="$TOS_SANDBOX" \
-        TOS_OUTBOX="$TOS_OUTBOX" \
-        TOS_LOG="$TOS_LOG" \
-        TOS_INPUT="$TOS_INPUT" \
-        GITHUB_TOKEN="$TOS_GITHUB_TOKEN" \
-        zsh -c "
-            export HOME=/tmp/tos_ghost
-            mkdir -p \$HOME '$TOS_OUTBOX' '$TOS_SANDBOX' \$(dirname '$TOS_LOG')
-            zsh $1
-        "
-}
-
-# 4. Context Anchoring
-cd "$TOS_SANDBOX" || { echo "❌ Failed to enter sandbox: $TOS_SANDBOX"; exit 1; }
-
-# 5. Command Dispatch
-case "$1" in
-    "wrapper") run_as_ghost "$TOS_BIN/tos_wrapper.sh" ;;
-    "publish") run_as_ghost "$TOS_BIN/tos_publish.sh" ;;
+case "$CMD" in
+    "wrapper") "$TOS_BIN/tos_wrapper.sh" "$@" ;;
+    "publish") "$TOS_BIN/tos_publish.sh" "$@" ;;
     "new")     "$TOS_BIN/tos_project_creator.sh" "$@" ;;
-    *)         run_as_ghost "$TOS_BIN/tos_wrapper.sh" && run_as_ghost "$TOS_BIN/tos_publish.sh" ;;
+    "")        "$TOS_BIN/tos_wrapper.sh" && "$TOS_BIN/tos_publish.sh" ;;
+    *)         echo "Usage: team_of_six [wrapper|new|publish]" ;;
 esac

@@ -1,0 +1,39 @@
+#!/bin/zsh
+
+# [FIXED] Config is loaded BEFORE security checks.
+source "/mnt/team-of-six/.local/conf/config"
+
+if [ "$USER" != "$AI_USER" ]; then
+    echo "❌ ERROR: You must cross the threshold."
+    echo "Run: sudo -u $AI_USER /mnt/team-of-six/.local/bin/tos $@"
+    exit 1
+fi
+
+if [ -z "$SUDO_USER" ]; then
+    echo "❌ ERROR: Could not determine calling user. Must be run via sudo."
+    exit 1
+fi
+
+# [FIXED] IPC folder created dynamically based on config/user variables.
+IPC_DIR="/run/${AI_USER}"
+mkdir -p "$IPC_DIR" 2>/dev/null || true
+export TOS_INPUT="$IPC_DIR/${SUDO_USER}_input.sh"
+
+# [FIXED] UX Improvement: Halts and points Architect to the empty file.
+if [ ! -s "$TOS_INPUT" ]; then
+    touch "$TOS_INPUT"
+    chmod 660 "$TOS_INPUT"
+    echo "⚠️  Awaiting Instructions."
+    echo "Please write your execution script to: $TOS_INPUT"
+    echo "Then re-run this command."
+    exit 1
+fi
+
+CMD="$1"
+[[ $# -gt 0 ]] && shift
+case "$CMD" in
+    "wrapper") "$TOS_BIN/tos_wrapper.sh" "$@" ;;
+    "publish") "$TOS_BIN/tos_publish.sh" "$@" ;;
+    "")        "$TOS_BIN/tos_wrapper.sh" && "$TOS_BIN/tos_publish.sh" ;;
+    *)         echo "Usage: sudo -u $AI_USER $TOS_BIN/tos [wrapper|publish]" ;;
+esac
