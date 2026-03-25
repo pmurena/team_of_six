@@ -1,4 +1,4 @@
-export TOS_MNT_ROOT="/mnt/team-of-six"
+export TOS_MNT_ROOT="/mnt/team_of_six"
 export TOS_SANDBOX="$TOS_MNT_ROOT/sandbox"
 export TOS_LOCAL="$TOS_MNT_ROOT/.local"
 export TOS_BIN="$TOS_LOCAL/bin"
