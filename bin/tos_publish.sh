@@ -1,4 +1,6 @@
 #!/bin/zsh
+# V68 Fix: Prevent crash on empty payload directories
+setopt nullglob  
 source "$TOS_MNT_ROOT/.local/conf/error_trap.sh"
 
 # Explicitly load token
