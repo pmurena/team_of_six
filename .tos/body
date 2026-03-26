@@ -1,1 +1,0 @@
-The V68 unification patch accidentally removed the `gh issue create` calls and unconditionally deleted payloads regardless of API success. This patch restores routing, adds a boolean success gate before dropping payloads, and hydrates the GH_TOKEN.
