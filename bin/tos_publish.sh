@@ -1,5 +1,6 @@
 #!/bin/zsh
 # V68 Fix: Prevent crash on empty payload directories
+# I need a change in this file to test.
 setopt nullglob  
 source "$TOS_MNT_ROOT/.local/conf/error_trap.sh"
 
