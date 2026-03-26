@@ -1,100 +1,64 @@
 #!/bin/zsh
-# Team of Six - Project Creator (Distributed Genesis & Migration)
+# Team of Six - Project Creator (Architect-First Genesis)
 set -e
 
-PROJECT_NAME=$1
-if [ -z "$PROJECT_NAME" ]; then
-    echo "Usage: team_of_six new <project_name>"
+echo "🚀 Initiating Sandbox linkage for Architect repository..."
+
+# 1. Verify we are in an initialized Git repository
+if [ ! -d ".git" ]; then
+    echo "⛔ ERROR: No .git directory found in the current folder."
+    echo "Please initialize the repository (git init) and set up the remote first."
     exit 1
 fi
 
-TOS_DIR="$HOME/.team_of_six"
-source "$TOS_DIR/tos_config"
-source "$TOS_DIR/.token" || { echo "❌ Error: Missing token in $TOS_DIR/.token"; exit 1; }
-
-ARCHITECT_DIR="$(pwd)/$PROJECT_NAME"
-SANDBOX_BASE="/mnt/team_of_six"
-SANDBOX_DIR="$SANDBOX_BASE/$PROJECT_NAME"
-
-echo "🚀 Initiating Genesis/Migration for '$PROJECT_NAME'..."
-
-# --- 1. ARCHITECT WORKSPACE (Local Scaffolding) ---
-echo "📂 1. Setting up Architect workspace at $ARCHITECT_DIR..."
-mkdir -p "$ARCHITECT_DIR/.tos"
-cd "$ARCHITECT_DIR"
-
-# Only create if they don't exist to prevent overwriting custom migrations
-[ ! -f ".tos/state" ] && echo "Scaffolding" > ".tos/state"
-[ ! -f ".tos/objections.md" ] && touch ".tos/objections.md"
-if [ ! -f ".tos/features.md" ]; then
-    cat <<BACKLOG > ".tos/features.md"
-# 📋 Project Backlog: $PROJECT_NAME
-* [ ] Initial Architecture (Current)
-BACKLOG
+# 2. Extract Remote URL
+REMOTE_URL=$(git remote get-url origin 2>/dev/null)
+if [ -z "$REMOTE_URL" ]; then
+    echo "⛔ ERROR: No remote 'origin' found."
+    echo "Please add a remote (e.g., git remote add origin <url>) before linking to the Ghost Sandbox."
+    exit 1
 fi
 
-# --- 2. GIT PUBLICATION ---
-echo "🌱 2. Syncing with Git..."
-IS_EXISTING_REPO=false
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    IS_EXISTING_REPO=true
-    echo "   -> Existing Git repository detected."
-else
-    echo "   -> Initializing new Git repository..."
-    git init -b main
+# Use the current directory name as the project name
+PROJECT_NAME=$(basename "$(pwd)")
+SANDBOX_DIR="$TOS_SANDBOX/$PROJECT_NAME"
+
+echo "📂 Project: $PROJECT_NAME"
+echo "🔗 Remote:  $REMOTE_URL"
+
+# 3. Prevent overwriting existing sandbox instances
+if [ -d "$SANDBOX_DIR" ]; then
+    echo "⛔ ERROR: The repository is already cloned in the sandbox at $SANDBOX_DIR."
+    echo "Aborting to prevent state corruption."
+    exit 1
 fi
 
-git add .tos/
-if ! git diff --cached --quiet; then
-    git commit -m "chore: Team of Six (V56) migration & scaffolding"
-fi
+# 4. Provision the Ghost Sandbox (As AI_USER)
+echo "👻 Provisioning Ghost Sandbox at $SANDBOX_DIR..."
 
-# Determine Remote & Push
-if [ "$IS_EXISTING_REPO" = true ] && git remote get-url origin >/dev/null 2>&1; then
-    echo "   -> Pushing migration to existing origin..."
-    git push origin HEAD
-    # Extract the repository path (user/repo) using gh cli
-    REPO_PATH=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-else
-    echo "   -> Creating new private repository on GitHub..."
-    GITHUB_USER=$(gh api user -q ".login")
-    if [ -z "$GITHUB_USER" ]; then
-        echo "❌ Error: Could not determine GitHub user. Ensure you are logged in via 'gh auth login'."
+# Resolve Token (Checking standard V68/V64 locations if not already exported)
+if [ -z "$GITHUB_TOKEN" ]; then
+    if [ -f "$TOS_MNT_ROOT/.local/conf/.token" ]; then
+        GITHUB_TOKEN=$(cat "$TOS_MNT_ROOT/.local/conf/.token" | tr -d '\n\r ')
+    elif [ -f "$TOS_SANDBOX/.tos/.token" ]; then
+        GITHUB_TOKEN=$(cat "$TOS_SANDBOX/.tos/.token" | tr -d '\n\r ')
+    else
+        echo "⛔ ERROR: GITHUB_TOKEN is not set or found in the configuration files."
         exit 1
     fi
-    gh repo create "$PROJECT_NAME" --private --source=. --remote=origin --push
-    REPO_PATH="$GITHUB_USER/$PROJECT_NAME"
 fi
 
-# --- 3. GHOST SANDBOX (Independent Pull) ---
-echo "👻 3. Provisioning Ghost Sandbox at $SANDBOX_DIR..."
+# Extract the "user/repo" path from either SSH or HTTPS URLs
+REPO_PATH=$(echo "$REMOTE_URL" | sed -e 's/.*github.com[:/]//' -e 's/\.git$//')
+AUTH_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_PATH}.git"
 
-if [ ! -d "$SANDBOX_BASE" ]; then
-    echo "❌ Error: Sandbox base $SANDBOX_BASE missing."
-    exit 1
-fi
+# Navigate to sandbox and clone
+cd "$TOS_SANDBOX" || exit 1
+git clone "$AUTH_URL" "$PROJECT_NAME"
 
-# Execute clone strictly as the AI_USER
-sudo -u "$AI_USER" zsh <<GHOST
-    export GH_TOKEN="$GITHUB_TOKEN"
-    cd "$SANDBOX_BASE"
-    
-    if [ -d "$PROJECT_NAME/.git" ]; then
-        echo "   -> Sandbox already exists. Pulling latest migration state..."
-        cd "$PROJECT_NAME"
-        git pull origin HEAD
-    else
-        echo "   -> Cloning repository into sandbox..."
-        git clone "https://x-access-token:\$GH_TOKEN@github.com/$REPO_PATH.git" "$PROJECT_NAME"
-        
-        # Configure the Ghost's local identity for this repo
-        cd "$PROJECT_NAME"
-        git config --local user.name "Team of Six (V56)"
-        git config --local user.email "agent@teamofsix.bot"
-        git config --local url."https://x-access-token:\$GH_TOKEN@github.com/".insteadOf "https://github.com/"
-    fi
-GHOST
+# Configure the local Git identity inside the sandbox
+cd "$PROJECT_NAME"
+git config --local user.name "Team of Six"
+git config --local user.email "agent@teamofsix.bot"
 
-echo "✅ Migration/Genesis Complete!"
-echo "   -> Architect Clone: $ARCHITECT_DIR"
-echo "   -> Ghost Sandbox:   $SANDBOX_DIR"
+echo "✅ Project '$PROJECT_NAME' successfully linked and checked out in the Ghost Sandbox!"
