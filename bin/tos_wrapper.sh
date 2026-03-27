@@ -22,7 +22,10 @@ fi
     echo "⚡ TASK INPUT STARTED"
     cat "$TOS_INPUT"
 
-    cd "$TOS_SANDBOX" || exit 1
+    # V70: Contextual Drop-in
+    mkdir -p "$TOS_WORKING_DIR"
+    cd "$TOS_WORKING_DIR" || exit 1
+    
     source "$TOS_INPUT"
     
     EXIT_CODE=$?
