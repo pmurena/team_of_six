@@ -1,7 +1,4 @@
 #!/bin/zsh
-# V68 Fix: Prevent crash on empty payload directories
-# I need a change in this file to test.
-setopt nullglob  
 source "$TOS_MNT_ROOT/.local/conf/error_trap.sh"
 
 # Explicitly load token
@@ -50,6 +47,10 @@ fi
 
                  COMMIT_MSG="$TITLE\n\n$BODY"
                  [ -n "$REF" ] && COMMIT_MSG="$COMMIT_MSG\n\nFixes #$REF"
+
+                 # V70: GHOST IDENTITY INJECTION
+                 export GIT_AUTHOR_NAME="Team of Six (Ghost)"
+                 export GIT_AUTHOR_EMAIL="ghost@teamofsix.local"
 
                  git commit -m "$COMMIT_MSG"
 
