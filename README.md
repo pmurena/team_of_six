@@ -1,41 +1,40 @@
-# 💎 Team of Six (V63 XDG Native Edition)
+# 👻 Team of Six (v70) - The Air-Gapped Agentic OS
 
-## 👑 Identity & Values
-The **Team of Six** is a State-Persistent DevOps team operating as a "System Ghost".
-* **The Architect (User):** Defines *what* to build.
-* **The Ghost (AI):** Determines *how* to build it and generates the execution scripts.
-* **The Bridge:** You act as the physical interface, feeding the AI's scripts into the local, air-gapped engine.
+**Team of Six** is a state-persistent, agentic DevOps framework designed for high-speed, terminal-native developers. 
 
-## 🏗️ Architecture (V63)
-* **XDG Native:** Configuration and state are managed via `$XDG_CONFIG_HOME`, `$XDG_RUNTIME_DIR`, and `$XDG_STATE_HOME`.
-* **Ghost Ownership:** The `AI_USER` strictly owns the Sandbox workspace.
-* **Sandboxed Code Execution:** The `team_of_six wrapper` executes the AI's bash scripts inside the `$TOS_SANDBOX`. Scripts execute at the sandbox root and must navigate into specific projects manually.
-* **The Outbox Mutex:** Actual code modifications are made directly in the `$TOS_SANDBOX`. However, all *GitOps publication instructions* must be staged as payloads in `$TOS_OUTBOX`. The AI cannot accept new tasks if there are unpublished publication payloads pending.
-* **Dynamic GitOps Router:** The publisher dynamically scans `$TOS_OUTBOX` payloads to execute commits, open PRs, update PRs, or manage Issues based on the presence of `branch` and `ref` files. 
+Unlike standard coding copilots that blindly inject code into your editor, Team of Six operates as a "System Ghost" in an isolated sandbox. You (The Architect) define the intent in your IDE; the Ghost figures out the implementation, executes the bash commands, and manages the GitOps pipeline autonomously.
 
-> **Important:** The publisher uses `git add .` to process codebase modifications. Due to this, only one code-modifying payload (a payload with a `branch` file) can be staged and processed per project at a time.
+## 🧠 Model Requirements (The LLM)
+Because the Ghost is completely blind to your local host and communicates *only* via generated Zsh execution scripts, **instruction-following capability is paramount**. 
+* We strongly recommend using frontier models (like **Claude 3.5 Sonnet** or **GPT-4o**) for the Ghost persona.
+* Weaker or smaller local models may fail to respect the strict "Mirror -> Execute" state machine, leading to malformed bash scripts or premature executions.
 
-## ⚡ Usage
+## ✨ Key Features
+* **Zero Context-Switching:** Stay in your IDE. Communicate with the Ghost via an Inter-Process Communication (IPC) file in `/run/team_of_six/`.
+* **Air-Gapped Security:** The Ghost runs under a restricted Linux user (`team_of_six`). It cannot modify your host environment or read your personal files.
+* **Strict TDD & GitOps:** The system enforces a "Test-First" branching strategy. Actual code modifications are handled in the sandbox and pushed directly to GitHub Pull Requests.
+* **Zsh & FHS Native:** Zero heavy runtimes (No Node.js, Python, or Docker required). Core routing is pure Zsh.
 
-**1. Scaffold a New Project:**
+## 🛠️ Installation (Linux & macOS)
+The installer configures the system user, permissions, and FHS directories (`/opt/team_of_six`, `/mnt/team_of_six`, `/run/team_of_six`).
 ```zsh
-team_of_six new <project_name>
+git clone [https://github.com/pmurena/team_of_six.git](https://github.com/pmurena/team_of_six.git)
+cd team_of_six
+sudo ./bin/tos_installer.sh
 ```
 
-**2. Execute AI Logic (The Wrapper):**
+## 🚀 Quick Start
 ```zsh
-team_of_six wrapper
-```
-*(Fails if unpublished payloads are detected in `$TOS_OUTBOX`).*
+# 1. Provision a new project in the sandbox
+sudo -u team_of_six tos my_project new
 
-**3. Publish & Sync to GitHub (The Governor):**
-```zsh
-team_of_six publish
-```
-*(Scans `$TOS_OUTBOX/<project>/<payload_id>/` for `title` and `body` files. Missing files will trigger a Gov. failure. Automatically updates GitHub PRs and Issues).*
+# 2. Sync issue/branch context for the AI
+sudo -u team_of_six tos my_project work main
 
-**4. Unified Loop (Default):**
-```zsh
-team_of_six
+# 3. Execute an AI-generated script
+sudo -u team_of_six tos my_project wrapper
+
+# 4. Publish AI changes to GitHub
+sudo -u team_of_six tos my_project publish
 ```
-*(Executes `wrapper` and then immediately attempts to `publish`).*
+*For the complete Issue-Driven lifecycle, see [docs/WORKFLOW.md](docs/WORKFLOW.md).*
