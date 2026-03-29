@@ -1,6 +1,7 @@
 export TOS_MNT_ROOT="/mnt/team_of_six"
 export TOS_SANDBOX="$TOS_MNT_ROOT/sandbox"
 export TOS_LOCAL="$TOS_MNT_ROOT/.local"
+exoprt IPC_DIR="$TOS_MNT_ROOT/.ipc"
 export TOS_BIN="$TOS_LOCAL/bin"
 export TOS_CONF="$TOS_LOCAL/conf"
 export TOS_OUTBOX="$TOS_SANDBOX/.tos_outbox"

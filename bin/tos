@@ -1,7 +1,8 @@
-#!/bin/zsh
+#!/zsh
 
 source "/mnt/team_of_six/.local/conf/config"
 
+# 1. Identity Check
 if [ "$USER" != "$AI_USER" ]; then
     echo "❌ ERROR: You must cross the threshold."
     echo "Run: sudo -u $AI_USER /mnt/team_of_six/.local/bin/tos $@"
@@ -22,19 +23,45 @@ if [[ -z "$PROJECT_NAME" || -z "$CMD" ]]; then
     exit 1
 fi
 
-# Dynamically route IPC to /run and export for modules
-IPC_DIR="/run/${AI_USER}"
-mkdir -p "$IPC_DIR" 2>/dev/null || true
-export TOS_INPUT="$IPC_DIR/${SUDO_USER}_input.sh"
-
-# V70: Host vs. Sandbox CD Awareness
-if [[ "$(basename "$PWD")" == "$PROJECT_NAME" ]]; then
-    export TOS_WORKING_DIR="$PWD"
-else
-    export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
+# 2. IPC Infrastructure Setup
+USER_IPC_DIR="$IPC_DIR/${SUDO_USER}"
+if [[ ! -d "$USER_IPC_DIR" ]]; then
+    mkdir -p "$USER_IPC_DIR" 2>/dev/null || true
+    chown "${SUDO_USER}:${AI_USER}" "$USER_IPC_DIR" 2>/dev/null || true
+    chmod 770 "$USER_IPC_DIR"
 fi
 
-# Pure Routing Matrix
+# 3. INBOX: Human (SUDO_USER) Writes -> AI Reads
+export TOS_INPUT="$USER_IPC_DIR/tos_inbox.sh"
+if [[ ! -f "$TOS_INPUT" ]]; then
+    touch "$TOS_INPUT"
+    chown "${SUDO_USER}:${AI_USER}" "$TOS_INPUT" 2>/dev/null || true
+    chmod 640 "$TOS_INPUT"
+fi
+
+# 4. OUTBOX: AI (AI_USER) Writes -> Human Reads
+export TOS_CONTEXT="$USER_IPC_DIR/tos_outbox.md"
+if [[ ! -f "$TOS_CONTEXT" ]]; then
+    touch "$TOS_CONTEXT"
+    chown "${AI_USER}:${AI_USER}" "$TOS_CONTEXT" 2>/dev/null || true
+    chmod 640 "$TOS_CONTEXT"
+fi
+
+# ==============================================================================
+# V70 STRICT SANDBOX ENFORCEMENT
+# ==============================================================================
+export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
+
+if [[ "$CMD" != "new" ]]; then
+    if [ ! -d "$TOS_WORKING_DIR" ]; then
+        echo "⛔ ERROR: Sandbox environment not found for '$PROJECT_NAME'."
+        echo "The Ghost is air-gapped and requires a local sandbox clone."
+        echo "Please provision the sandbox by running: tos $PROJECT_NAME new"
+        exit 1
+    fi
+fi
+
+# 5. Pure Routing Matrix
 case "$CMD" in
     "work")    "$TOS_BIN/tos_work.sh" "$REF" ;;
     "wrapper") "$TOS_BIN/tos_wrapper.sh" ;;

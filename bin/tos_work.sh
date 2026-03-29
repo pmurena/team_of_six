@@ -1,6 +1,5 @@
 #!/bin/zsh
 REF=$1
-CONTEXT_FILE="/run/${AI_USER}/${SUDO_USER}_work_context.md"
 
 if [[ -z "$REF" ]]; then
     echo "Usage: tos <project_name> work <issue_or_pr_id>"
@@ -21,7 +20,7 @@ git fetch origin --prune
     else
         gh issue view "$REF"
     fi
-} > "$CONTEXT_FILE"
+} > "$TOS_CONTEXT"
 
-echo "✅ Context staged at $CONTEXT_FILE"
+echo "✅ Context staged at $TOS_CONTEXT"
 echo "Launch NeoVim and run :TosWork"
