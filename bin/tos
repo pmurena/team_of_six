@@ -1,71 +1,69 @@
-#!/zsh
+#!/bin/zsh
 
 source "/mnt/team_of_six/.local/conf/config"
 
-# 1. Identity Check
-if [ "$USER" != "$AI_USER" ]; then
-    echo "❌ ERROR: You must cross the threshold."
-    echo "Run: sudo -u $AI_USER /mnt/team_of_six/.local/bin/tos $@"
-    exit 1
+# --- THE ESCALATION GATEWAY ---
+if [[ "$USER" != "$AI_USER" ]]; then
+    if sudo -n -u "$AI_USER" "$TOS_BIN/tos" "$@"; then
+        exit $?
+    else
+        logger -t tos_ghost -p auth.err "UNAUTHORIZED ACCESS ATTEMPT: User '$USER' tried to execute 'tos $*'"
+        echo -e "\n❌ \033[1;31mACCESS DENIED: The Threshold is sealed.\033[0m"
+        echo "You must be a certified Architect to interact with the Ghost Engine."
+        echo "Contact your system administrator."
+        exit 1
+    fi
 fi
 
-if [ -z "$SUDO_USER" ]; then
-    echo "❌ ERROR: Could not determine calling user. Must be run via sudo."
+# Ensure SUDO_USER is tracked so we know which Architect is driving the engine
+if [[ -z "$SUDO_USER" ]]; then
+    echo "❌ ERROR: Context lost. SUDO_USER is not defined."
     exit 1
 fi
 
 PROJECT_NAME="$1"
 CMD="$2"
-REF="$3"
 
 if [[ -z "$PROJECT_NAME" || -z "$CMD" ]]; then
-    echo "Usage: tos <project_name> <wrapper|publish|work|new> [ref]"
+    echo "Usage: tos <project_name> <wrapper|publish|work|peek|new> [ref/files]"
     exit 1
 fi
 
-# 2. IPC Infrastructure Setup
-USER_IPC_DIR="$IPC_DIR/${SUDO_USER}"
-if [[ ! -d "$USER_IPC_DIR" ]]; then
-    mkdir -p "$USER_IPC_DIR" 2>/dev/null || true
-    chown "${SUDO_USER}:${AI_USER}" "$USER_IPC_DIR" 2>/dev/null || true
-    chmod 770 "$USER_IPC_DIR"
+# V72: IPC Routing via Config + User Isolation
+# This creates a private channel for the Architect within the IPC root
+export IPC_DIR="$TOS_IPC/$SUDO_USER"
+mkdir -p "$IPC_DIR" 2>/dev/null || true
+
+export TOS_INPUT="$IPC_DIR/input.sh"
+export TOS_CONTEXT="$IPC_DIR/outbox.md"
+
+# V72: Host vs. Sandbox Directory Awareness
+if [[ "$(basename "$PWD")" == "$PROJECT_NAME" ]]; then
+    export TOS_WORKING_DIR="$PWD"
+else
+    export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
 fi
 
-# 3. INBOX: Human (SUDO_USER) Writes -> AI Reads
-export TOS_INPUT="$USER_IPC_DIR/tos_inbox.sh"
-if [[ ! -f "$TOS_INPUT" ]]; then
-    touch "$TOS_INPUT"
-    chown "${SUDO_USER}:${AI_USER}" "$TOS_INPUT" 2>/dev/null || true
-    chmod 640 "$TOS_INPUT"
-fi
-
-# 4. OUTBOX: AI (AI_USER) Writes -> Human Reads
-export TOS_CONTEXT="$USER_IPC_DIR/tos_outbox.md"
-if [[ ! -f "$TOS_CONTEXT" ]]; then
-    touch "$TOS_CONTEXT"
-    chown "${AI_USER}:${AI_USER}" "$TOS_CONTEXT" 2>/dev/null || true
-    chmod 640 "$TOS_CONTEXT"
-fi
-
-# ==============================================================================
-# V70 STRICT SANDBOX ENFORCEMENT
-# ==============================================================================
-export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
-
-if [[ "$CMD" != "new" ]]; then
-    if [ ! -d "$TOS_WORKING_DIR" ]; then
-        echo "⛔ ERROR: Sandbox environment not found for '$PROJECT_NAME'."
-        echo "The Ghost is air-gapped and requires a local sandbox clone."
-        echo "Please provision the sandbox by running: tos $PROJECT_NAME new"
-        exit 1
-    fi
-fi
-
-# 5. Pure Routing Matrix
+# Pure Routing Matrix
 case "$CMD" in
-    "work")    "$TOS_BIN/tos_work.sh" "$REF" ;;
-    "wrapper") "$TOS_BIN/tos_wrapper.sh" ;;
-    "publish") "$TOS_BIN/tos_publish.sh" ;;
-    "new")     "$TOS_BIN/tos_project_creator.sh" "$PROJECT_NAME" ;;
-    *)         echo "Usage: tos <project_name> [wrapper|publish|work|new]" ;;
+    "work")    
+        shift 2
+        "$TOS_BIN/tos_work.sh" "$@" 
+        ;;
+    "peek")
+        shift 2
+        "$TOS_BIN/tos_peek.sh" "$@"
+        ;;
+    "wrapper") 
+        "$TOS_BIN/tos_wrapper.sh" 
+        ;;
+    "publish") 
+        "$TOS_BIN/tos_publish.sh" 
+        ;;
+    "new")     
+        "$TOS_BIN/tos_project_creator.sh" "$PROJECT_NAME" 
+        ;;
+    *)         
+        echo "Usage: tos <project_name> [wrapper|publish|work|peek|new]" 
+        ;;
 esac
