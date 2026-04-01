@@ -1,0 +1,14 @@
+#!/bin/zsh
+[[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
+
+PROJECT_NAME="$1"
+ACTION="$2"
+shift 2
+
+case "$ACTION" in
+    "start")         "$TOS_BIN/work/start.sh" "$PROJECT_NAME" ;;
+    "new")           "$TOS_BIN/work/new.sh" "$PROJECT_NAME" "$@" ;;
+    "peek")          "$TOS_BIN/work/peek.sh" "$PROJECT_NAME" "$@" ;;
+    *[0-9]*)         "$TOS_BIN/work/issue.sh" "$PROJECT_NAME" "$ACTION" ;;
+    *) echo "Usage: tos <project> work <start|new|peek|ISSUE_ID>"; exit 1 ;;
+esac

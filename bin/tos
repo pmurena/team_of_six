@@ -1,69 +1,31 @@
 #!/bin/zsh
-
 source "/mnt/team_of_six/.local/conf/config"
 
-# --- THE ESCALATION GATEWAY ---
 if [[ "$USER" != "$AI_USER" ]]; then
     if sudo -n -u "$AI_USER" "$TOS_BIN/tos" "$@"; then
         exit $?
     else
-        logger -t tos_ghost -p auth.err "UNAUTHORIZED ACCESS ATTEMPT: User '$USER' tried to execute 'tos $*'"
         echo -e "\n❌ \033[1;31mACCESS DENIED: The Threshold is sealed.\033[0m"
-        echo "You must be a certified Architect to interact with the Ghost Engine."
-        echo "Contact your system administrator."
         exit 1
     fi
 fi
 
-# Ensure SUDO_USER is tracked so we know which Architect is driving the engine
-if [[ -z "$SUDO_USER" ]]; then
-    echo "❌ ERROR: Context lost. SUDO_USER is not defined."
-    exit 1
-fi
+[[ -z "$SUDO_USER" ]] && { echo "❌ ERROR: SUDO_USER is not defined."; exit 1; }
+
+source "$TOS_BIN/utils/error_trap.sh"
 
 PROJECT_NAME="$1"
-CMD="$2"
+MODULE="$2"
+shift 2 
 
-if [[ -z "$PROJECT_NAME" || -z "$CMD" ]]; then
-    echo "Usage: tos <project_name> <wrapper|publish|work|peek|new> [ref/files]"
-    exit 1
-fi
+[[ -z "$PROJECT_NAME" || -z "$MODULE" ]] && { echo "Usage: tos <project> <work|write>"; exit 1; }
 
-# V72: IPC Routing via Config + User Isolation
-# This creates a private channel for the Architect within the IPC root
-export IPC_DIR="$TOS_IPC/$SUDO_USER"
-mkdir -p "$IPC_DIR" 2>/dev/null || true
+mkdir -p "$TOS_IPC" 2>/dev/null || true
+export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
+export TOS_CONTROLLER_LOCKED="true"
 
-export TOS_INPUT="$IPC_DIR/input.sh"
-export TOS_CONTEXT="$IPC_DIR/outbox.md"
-
-# V72: Host vs. Sandbox Directory Awareness
-if [[ "$(basename "$PWD")" == "$PROJECT_NAME" ]]; then
-    export TOS_WORKING_DIR="$PWD"
-else
-    export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
-fi
-
-# Pure Routing Matrix
-case "$CMD" in
-    "work")    
-        shift 2
-        "$TOS_BIN/tos_work.sh" "$@" 
-        ;;
-    "peek")
-        shift 2
-        "$TOS_BIN/tos_peek.sh" "$@"
-        ;;
-    "wrapper") 
-        "$TOS_BIN/tos_wrapper.sh" 
-        ;;
-    "publish") 
-        "$TOS_BIN/tos_publish.sh" 
-        ;;
-    "new")     
-        "$TOS_BIN/tos_project_creator.sh" "$PROJECT_NAME" 
-        ;;
-    *)         
-        echo "Usage: tos <project_name> [wrapper|publish|work|peek|new]" 
-        ;;
+case "$MODULE" in
+    "work")  "$TOS_BIN/work/tos" "$PROJECT_NAME" "$@" ;;
+    "write") "$TOS_BIN/write/tos" "$PROJECT_NAME" "$@" ;;
+    *)       echo "Usage: tos <project> <work|write>" ;;
 esac

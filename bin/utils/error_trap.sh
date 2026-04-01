@@ -1,5 +1,7 @@
+#!/bin/zsh
 set -e
 trap 'catch_error $LINENO $?' ZERR
+
 catch_error() {
     local line=$1
     local code=$2

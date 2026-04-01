@@ -1,10 +1,12 @@
+#!/bin/zsh
 export TOS_MNT_ROOT="/mnt/team_of_six"
-export TOS_SANDBOX="$TOS_MNT_ROOT/sandbox"
-export TOS_LOCAL="$TOS_MNT_ROOT/.local"
-export IPC_DIR="$TOS_MNT_ROOT/.ipc"
-export TOS_BIN="$TOS_LOCAL/bin"
-export TOS_CONF="$TOS_LOCAL/conf"
-export TOS_GIT_TOKEN="$TOS_CONF/.token"
-export TOS_OUTBOX="$TOS_SANDBOX/.tos_outbox"
-export AI_USER="team_of_six"
-export AI_GROUP="$AI_USER"
+export TOS_BIN="$TOS_MNT_ROOT/.local/bin"
+export TOS_CONF="$TOS_MNT_ROOT/.local/conf"
+
+if [[ -n "$SUDO_USER" ]]; then
+    export TOS_IPC="$TOS_MNT_ROOT/tos_home/$SUDO_USER/.ipc"
+    export TOS_SANDBOX="$TOS_MNT_ROOT/tos_home/$SUDO_USER/sandbox"
+    
+    export TOS_INPUT="$TOS_IPC/inbox.md"
+    export TOS_CONTEXT="$TOS_IPC/outbox.md"
+fi
