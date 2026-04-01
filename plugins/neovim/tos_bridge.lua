@@ -1,5 +1,5 @@
 -- ==============================================================================
--- Team of Six (V72) - NeoVim IPC Bridge (Zsh Native)
+-- Team of Six (V76) - NeoVim IPC Bridge (Zsh Native)
 -- ==============================================================================
 
 local function get_project_name()
@@ -56,7 +56,7 @@ vim.api.nvim_create_user_command("TosWork", function()
 		end
 
 		-- Read the newly generated context from the IPC directory
-		local context_path = "/mnt/team_of_six/.ipc/" .. user .. "/tos_outbox.md"
+		local context_path = "/mnt/team_of_six/tos_home/" .. user .. "/.ipc/outbox.md"
 		local file = io.open(context_path, "r")
 		if not file then
 			return vim.notify("❌ Context not found after sync. Path: " .. context_path, vim.log.levels.ERROR)
@@ -79,10 +79,10 @@ end, {})
 local function run_tos_selection()
 	vim.cmd('noau normal! "ty')
 	local project = get_project_name()
-	local user = os.getenv("USER") or "architect"
+	local user = os.getenv("SUDO_USER") or os.getenv("USER") or "architect"
 
-	-- Updated to strictly use the IPC matrix mapping
-	local ipc_file = "/mnt/team_of_six/.ipc/" .. user .. "/tos_inbox.sh"
+	-- Updated to the new Markdown Typewriter format
+	local ipc_file = "/mnt/team_of_six/tos_home/" .. user .. "/.ipc/inbox.md"
 
 	local f = io.open(ipc_file, "w")
 	if not f then
@@ -91,9 +91,17 @@ local function run_tos_selection()
 	f:write(vim.fn.getreg("t"))
 	f:close()
 
-	local cmd = string.format("sudo -u team_of_six /mnt/team_of_six/.local/bin/tos %s wrapper", project)
-	vim.cmd("botright 20split | terminal " .. cmd)
-	vim.cmd("startinsert")
+	-- Ask the Architect if this is a code change or a comment
+	vim.ui.select({ "code", "comment" }, {
+		prompt = "👻 Select Write Action (Team of Six):",
+	}, function(action)
+		if not action then
+			return
+		end
+		local cmd = string.format("sudo -u team_of_six /mnt/team_of_six/.local/bin/tos %s write %s", project, action)
+		vim.cmd("botright 20split | terminal " .. cmd)
+		vim.cmd("startinsert")
+	end)
 end
 
 -- Keymaps
