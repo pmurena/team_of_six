@@ -22,17 +22,17 @@ TOS operates on a strict separation of powers:
 ## 🚀 Quick Start
 1. **Deploy the Infrastructure:**
 
-   ```bash
-   sudo ./inf/tos_deploy.sh
-   ```
+    ```bash
+    sudo ./inf/tos_deploy.sh
+    ```
    
    This scaffolds the architecture, creates the AI user/group, and applies strict permission topologies.
 
 2. **Add a User:**
 
-   ```bash
-   sudo ./inf/tos_add_user.sh <username>
-   ```
+    ```bash
+    sudo ./inf/tos_add_user.sh <username>
+    ```
    
    This adds the user to the AI group and configures the `sudoers` perimeter.
 
@@ -40,16 +40,16 @@ TOS operates on a strict separation of powers:
    
    The Ghost requires a GitHub Personal Access Token (Classic) with `repo` and `read:org` scopes to clone and manage issues. You must place this in the engine's secure config folder.
 
-   ```bash
-   sudo sh -c 'echo "YOUR_GITHUB_TOKEN" > /mnt/team_of_six/.local/conf/.token'
-   sudo chown team_of_six:team_of_six /mnt/team_of_six/.local/conf/.token
-   sudo chmod 400 /mnt/team_of_six/.local/conf/.token
-   ```
+    ```bash
+    sudo sh -c 'echo "YOUR_GITHUB_TOKEN" > /mnt/team_of_six/.local/conf/.token'
+    sudo chown team_of_six:team_of_six /mnt/team_of_six/.local/conf/.token
+    sudo chmod 400 /mnt/team_of_six/.local/conf/.token
+    ```
 
 4. **Provision a Project:**
 
-   ```bash
-   tos <project_name> work start
-   ```
+    ```bash
+    tos <project_name> work start
+    ```
    
    This clones the target repository into a locked sandbox and queries active issues.
