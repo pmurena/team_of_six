@@ -7,12 +7,17 @@ local function get_project_name()
 	return name ~= "" and name or vim.fn.fnamemodify(vim.fn.getcwd(), ":t")
 end
 
+local function get_mnt_root()
+	return os.getenv("TOS_MNT_ROOT") or "/mnt/team_of_six"
+end
+
 vim.keymap.set("n", "<leader>l", "", { desc = "[L]LM Toolbox (Team of Six)" })
 
 -- 1. The Work Trigger (Evolved with Interactive GitHub Sync)
 vim.api.nvim_create_user_command("TosWork", function()
 	local project = get_project_name()
 	local user = os.getenv("USER") or "architect"
+	local mnt_root = get_mnt_root()
 
 	vim.notify("👻 Querying GitHub for active tasks...", vim.log.levels.INFO)
 
@@ -47,8 +52,8 @@ vim.api.nvim_create_user_command("TosWork", function()
 		vim.notify("⏳ Syncing Remote Truth for ID: " .. target_id .. "...", vim.log.levels.INFO)
 
 		-- Execute the daemon synchronously to generate the outbox
-		local tos_cmd =
-			string.format("sudo -u team_of_six /mnt/team_of_six/.local/bin/tos %s work %s", project, target_id)
+		-- FIXED: Removed redundant sudo call. Let the gateway handle escalation.
+		local tos_cmd = string.format("%s/.local/bin/tos %s work %s", mnt_root, project, target_id)
 		local res = vim.fn.system(tos_cmd)
 
 		if vim.v.shell_error ~= 0 then
@@ -56,7 +61,7 @@ vim.api.nvim_create_user_command("TosWork", function()
 		end
 
 		-- Read the newly generated context from the IPC directory
-		local context_path = "/mnt/team_of_six/tos_home/" .. user .. "/.ipc/outbox.md"
+		local context_path = string.format("%s/tos_home/%s/.ipc/outbox.md", mnt_root, user)
 		local file = io.open(context_path, "r")
 		if not file then
 			return vim.notify("❌ Context not found after sync. Path: " .. context_path, vim.log.levels.ERROR)
@@ -80,9 +85,10 @@ local function run_tos_selection()
 	vim.cmd('noau normal! "ty')
 	local project = get_project_name()
 	local user = os.getenv("SUDO_USER") or os.getenv("USER") or "architect"
+	local mnt_root = get_mnt_root()
 
 	-- Updated to the new Markdown Typewriter format
-	local ipc_file = "/mnt/team_of_six/tos_home/" .. user .. "/.ipc/inbox.md"
+	local ipc_file = string.format("%s/tos_home/%s/.ipc/inbox.md", mnt_root, user)
 
 	local f = io.open(ipc_file, "w")
 	if not f then
@@ -98,7 +104,8 @@ local function run_tos_selection()
 		if not action then
 			return
 		end
-		local cmd = string.format("sudo -u team_of_six /mnt/team_of_six/.local/bin/tos %s write %s", project, action)
+		-- FIXED: Removed redundant sudo call. Let the gateway handle escalation.
+		local cmd = string.format("%s/.local/bin/tos %s write %s", mnt_root, project, action)
 		vim.cmd("botright 20split | terminal " .. cmd)
 		vim.cmd("startinsert")
 	end)

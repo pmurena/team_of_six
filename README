@@ -1,6 +1,6 @@
 # Team of Six (TOS) — The Ghost in the Machine
 
-**Team of Six** is a declarative, air-gapped DevOps framework designed to let LLM agents (The "Ghost") interact with a repository without having direct shell access. 
+**Team of Six** is a declarative, air-gapped DevOps framework designed to let LLM agents (The "Ghost") interact with a repository without having direct shell access.
 
 It uses a "Typewriter" architecture where the agent outputs synthetic tags, and a local engine parses those tags to perform Git operations, file manipulation, and GitHub Issue management.
 
@@ -25,13 +25,23 @@ TOS operates on a strict separation of powers:
     sudo ./inf/tos_deploy.sh
     ```
     This scaffolds the architecture, creates the AI user/group, and applies strict permission topologies.
+
 2.  **Add a User:**
     ```bash
     sudo ./inf/tos_add_user.sh <username>
     ```
     This adds the user to the AI group and configures the `sudoers` perimeter.
-3.  **Provision a Project:**
+
+3.  **Supply the GitHub Token (The Airlock Key):**
+    The Ghost requires a GitHub Personal Access Token (Classic) with `repo` and `read:org` scopes to clone and manage issues. You must place this in the engine's secure config folder.
+    ```bash
+    sudo sh -c 'echo "YOUR_GITHUB_TOKEN" > /mnt/team_of_six/.local/conf/.token'
+    sudo chown team_of_six:team_of_six /mnt/team_of_six/.local/conf/.token
+    sudo chmod 400 /mnt/team_of_six/.local/conf/.token
+    ```
+
+4.  **Provision a Project:**
     ```bash
     tos <project_name> work start
     ```
-    This clones the target repository into a locked sandbox.
+    This clones the target repository into a locked sandbox and queries active issues.
