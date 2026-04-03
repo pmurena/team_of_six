@@ -1,14 +1,14 @@
-#!/usr/bin/env zsh
+#!/bin/zsh
 # ==============================================================================
-# Team of Six - Multi-Tenant User Provisioner (V76)
-# Path: inf/tos_add_user.sh
+# Title: Multi-Tenant User Provisioner
+#
+# Usage Explanation: Run this script via `sudo` when onboarding a new human 
+# Architect to the machine. It adds the human to the AI group, provisions their 
+# personal IPC ribbon (inbox/outbox), builds their locked Ghost sandbox, and 
+# wires the sudoers file to allow passwordless execution of the gateway engine.
 # ==============================================================================
 
 TARGET_USER=$1
-AI_GROUP=${AI_GROUP:-$AI_USER}
-# Resolve Repo Root from inf/ directory
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-source "$REPO_ROOT/conf/config"
 
 if [[ -z "$TARGET_USER" ]]; then
     echo "Usage: sudo ./inf/tos_add_user.sh <username>"
@@ -20,13 +20,20 @@ if [[ "$EUID" -ne 0 ]]; then
     exit 1
 fi
 
+# 1. Resolve Repo Root and Source Config FIRST
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "$REPO_ROOT/conf/config"
+
+# Now the config is loaded, we can safely fall back to AI_USER
+AI_GROUP=${AI_GROUP:-$AI_USER}
+
 echo "👥 Onboarding $TARGET_USER..."
 
-# 1. Join Group
-getent group "$AI_USER" >/dev/null || groupadd "$AI_GROUP"
+# 2. Join Group
+getent group "$AI_GROUP" >/dev/null || groupadd "$AI_GROUP"
 usermod -a -G "$AI_GROUP" "$TARGET_USER"
 
-# 2. Provision IPC & Sandbox (The Airlock)
+# 3. Provision IPC & Sandbox (The Airlock)
 TARGET_IPC="$TOS_MNT_ROOT/tos_home/$TARGET_USER/.ipc"
 TARGET_SANDBOX="$TOS_MNT_ROOT/tos_home/$TARGET_USER/sandbox"
 
@@ -41,7 +48,7 @@ chmod 770 "$TARGET_IPC"
 chown "$AI_USER":"$AI_GROUP" "$TARGET_SANDBOX"
 chmod 700 "$TARGET_SANDBOX"
 
-# 3. Secure Sudoers (Group-wide - Only needs to happen once)
+# 4. Secure Sudoers (Group-wide - Only needs to happen once)
 SUDO_TMP=$(mktemp)
 SUDO_FINAL="/etc/sudoers.d/team_of_six_sandbox"
 echo "%${AI_GROUP} ALL=(${AI_USER}) NOPASSWD: ${TOS_BIN}/tos" > "$SUDO_TMP"

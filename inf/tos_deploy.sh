@@ -1,118 +1,124 @@
-#!/usr/bin/env zsh
-# ==============================================================================
-# Team of Six - V76 Modular Typewriter Deployer (Dev Edition)
-# Purpose: Infrastructure-as-Code for the Ghost Sandbox & XDG IPC Tier
-# Execution: sudo ./deploy.sh
-# ==============================================================================
+#!/bin/bash
 
-set -e
+# --- 0. PRIVILEGE CHECK ---
+# Fail immediately if not root
+if [[ $EUID -ne 0 ]]; then
+   echo "❌ ERROR: This script must be run as root (sudo)."
+   exit 1
+fi
 
-# --- 1. Load Defaults from Repo Config ---
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-REPO_CONF="$REPO_ROOT/conf/config"
+# --- 1. DEPENDENCY CHECK (Initial Shell) ---
+REQUIRED_PKGS=("zsh" "git" "rsync" "gh" "tee" "touch" "tree" "chown" "chmod" "mkdir")
 
-if [ -f "$REPO_CONF" ]; then
-    source "$REPO_CONF"
-    MNT_TARGET="$TOS_MNT_ROOT"
-    AI_GROUP="$AI_USER"
-else
-    echo "🚨 ERROR: Configuration file not found at $REPO_CONF"
+MISSING_PKGS=()
+for pkg in "${REQUIRED_PKGS[@]}"; do
+    if ! command -v "$pkg" &> /dev/null; then
+        MISSING_PKGS+=("$pkg")
+    fi
+done
+
+if [ ${#MISSING_PKGS[@]} -ne 0 ]; then
+    echo "❌ ERROR: Missing required dependencies: ${MISSING_PKGS[*]}"
     exit 1
 fi
 
-if [ "$EUID" -ne 0 ]; then
-  echo "🚨 ERROR: This script must be run with sudo."
-  exit 1
+# --- 2. ZSH FORCE (The Handover) ---
+if [ -z "$ZSH_VERSION" ]; then
+    exec zsh "$0" "$@"
 fi
 
-TARGET_USER="${SUDO_USER:-$USER}"
-USER_NEEDS_ACTIVATION=false
-
-# --- 2. Create Ghost user & Group ---
-echo "👥 Provisioning Identity..."
-getent group "$AI_GROUP" >/dev/null || groupadd "$AI_GROUP"
-id "$AI_USER" &>/dev/null || useradd -r -g "$AI_GROUP" -s /usr/sbin/nologin "$AI_USER"
-
-if ! id -nG "$TARGET_USER" | grep -qw "$AI_GROUP"; then
-    echo "   Adding $TARGET_USER to $AI_GROUP..."
-    usermod -a -G "$AI_GROUP" "$TARGET_USER"
-    USER_NEEDS_ACTIVATION=true
+# --- 3. REPO & REMOTE VALIDATION ---
+if [[ ! -d ".git" ]]; then
+    echo "❌ ERROR: .git directory not found. Run from repo root."
+    exit 1
 fi
 
-# --- 3. Directory Scaffolding ---
-echo "🏗️  Scaffolding Architecture at $MNT_TARGET..."
-mkdir -p "$MNT_TARGET/.local/bin/utils"
-mkdir -p "$MNT_TARGET/.local/bin/work"
-mkdir -p "$MNT_TARGET/.local/bin/write"
-mkdir -p "$MNT_TARGET/.local/conf"
-mkdir -p "$MNT_TARGET/tos_home/$TARGET_USER/.ipc"
-mkdir -p "$MNT_TARGET/tos_home/$TARGET_USER/sandbox"
-
-# --- 4. File Distribution ---
-echo "🚚 Deploying Modular Binaries..."
-cp -r "$REPO_ROOT/bin/"* "$MNT_TARGET/.local/bin/" 2>/dev/null || true
-
-if [ -f "$REPO_ROOT/conf/error_trap.sh" ]; then
-    cp "$REPO_ROOT/conf/error_trap.sh" "$MNT_TARGET/.local/bin/utils/error_trap.sh"
+REPO_URL=$(git remote get-url origin 2>/dev/null)
+if [[ "$REPO_URL" != *"team_of_six"* ]]; then
+    echo "❌ ERROR: Repository mismatch ($REPO_URL). Deployment aborted."
+    exit 1
 fi
-cp "$REPO_ROOT/conf/config" "$MNT_TARGET/.local/conf/config"
 
-find "$MNT_TARGET/.local/bin" -type f -exec sed -i 's/\r$//' {} +
-
-# --- 5. Security & Permission Topology ---
-echo "🔒 Wiring Strict Security Permissions..."
-
-# The Root Perimeter
-chown root:"$AI_GROUP" "$MNT_TARGET"
-chmod 750 "$MNT_TARGET"
-
-# Base Engine Directories (Root owned, Group can traverse)
-chown root:"$AI_GROUP" "$MNT_TARGET/.local"
-chown root:"$AI_GROUP" "$MNT_TARGET/.local/bin"
-chown root:"$AI_GROUP" "$MNT_TARGET/.local/conf"
-chmod 750 "$MNT_TARGET/.local"
-chmod 750 "$MNT_TARGET/.local/bin"
-chmod 750 "$MNT_TARGET/.local/conf"
-
-# The Config
-chmod 440 "$MNT_TARGET/.local/conf/config"
-
-# ==========================================
-# THE GATEWAY FIREWALL (THE FIX)
-# ==========================================
-# 1. Master Gateway: Root owns it. Group can read/execute to trigger escalation.
-chown root:"$AI_GROUP" "$MNT_TARGET/.local/bin/tos"
-chmod 550 "$MNT_TARGET/.local/bin/tos"
-
-# 2. Modules & Utils: Ghost owns them. Group is LOCKED OUT (500).
-# The Architect cannot run these directly. They must go through the Master Gateway.
-chown -R "$AI_USER":"$AI_GROUP" "$MNT_TARGET/.local/bin/utils"
-chown -R "$AI_USER":"$AI_GROUP" "$MNT_TARGET/.local/bin/work"
-chown -R "$AI_USER":"$AI_GROUP" "$MNT_TARGET/.local/bin/write"
-
-chmod -R 500 "$MNT_TARGET/.local/bin/utils"
-chmod -R 500 "$MNT_TARGET/.local/bin/work"
-chmod -R 500 "$MNT_TARGET/.local/bin/write"
-# ==========================================
-
-# The User Workspace & IPC
-chown root:"$AI_GROUP" "$MNT_TARGET/tos_home"
-chmod 750 "$MNT_TARGET/tos_home"
-
-chown "$TARGET_USER":"$AI_GROUP" "$MNT_TARGET/tos_home/$TARGET_USER"
-chmod 750 "$MNT_TARGET/tos_home/$TARGET_USER"
-
-# The Shared Typewriter Ribbon
-chown "$TARGET_USER":"$AI_GROUP" "$MNT_TARGET/tos_home/$TARGET_USER/.ipc"
-chmod 770 "$MNT_TARGET/tos_home/$TARGET_USER/.ipc"
-
-# The Ghost's Locked Sandbox
-chown "$AI_USER":"$AI_GROUP" "$MNT_TARGET/tos_home/$TARGET_USER/sandbox"
-chmod 700 "$MNT_TARGET/tos_home/$TARGET_USER/sandbox"
-
-echo -e "\n✅ Deployment Complete."
-
-if [ "$USER_NEEDS_ACTIVATION" = true ]; then
-    echo -e "\n⚠️  IMPORTANT: You have just been added to the '$AI_GROUP' group."
-    echo "To activate permissions in this terminal, run: newgrp $AI_GROUP"
+if [[ ! -f "inf/tos_deploy.sh" ]]; then
+    echo "❌ ERROR: Project signature not found."
+    exit 1
 fi
+
+# --- 4. STRICT CONFIGURATION ---
+CONFIG_FILE="./conf/config"
+if [[ -f "$CONFIG_FILE" ]]; then
+    # Since we are root, we can safely source protected configs
+    source "$CONFIG_FILE"
+else
+    echo "❌ ERROR: Configuration file missing at $CONFIG_FILE"
+    exit 1
+fi
+
+# Force validation of variables from config
+: "${TOS_MNT_ROOT:?Config Error: TOS_MNT_ROOT must be defined in $CONFIG_FILE}"
+: "${AI_USER:?Config Error: AI_USER must be defined in $CONFIG_FILE}"
+: "${AI_GROUP:?Config Error: AI_GROUP must be defined in $CONFIG_FILE}"
+
+# Internal source
+SOURCE_BIN="./bin/"
+
+[[ -t 0 ]] && clear
+
+cat << 'EOF'
+  _______                    ____   __   _____ _      
+ |__   __|                  / __ \ / _| / ____(_)     
+    | | ___  __ _ _ __ ___  | |  | | |_ | (___  ___  __
+    | |/ _ \/ _` | '_ ` _ \ | |  | |  _| \___ \| \ \/ /
+    | |  __/ (_| | | | | | || |__| | |  ____) | |>  < 
+    |_|\___|\__,_|_| |_| |_| \____/|_|  |_____/|_/_/\_\
+
+ Deployment & Security Scaffolding (Root Verified)
+==========================================================
+EOF
+
+# --- 5. MIRRORING ---
+echo "[*] Mirroring binaries to $TOS_MNT_ROOT..."
+
+mkdir -p "${TOS_MNT_ROOT}/.local/bin"
+mkdir -p "${TOS_MNT_ROOT}/.local/conf"
+
+if [[ -d "$SOURCE_BIN" ]]; then
+    {
+      rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/"
+    } | tee -a "${TOS_MNT_ROOT}/deploy.log"
+else
+    echo "❌ ERROR: Source directory '$SOURCE_BIN' not found."
+    exit 1
+fi
+
+# --- 6. PERMISSIONS & IPC HARDENING ---
+echo "[*] Securing IPC bridge and Sandbox for user: $USER_NAME"
+
+touch "${TOS_MNT_ROOT}/.local/conf/config" "${TOS_MNT_ROOT}/.local/conf/.token"
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.local/conf/config" "${TOS_MNT_ROOT}/.local/conf/.token"
+chmod 440 "${TOS_MNT_ROOT}/.local/conf/config"
+chmod 400 "${TOS_MNT_ROOT}/.local/conf/.token"
+
+mkdir -p "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc"
+mkdir -p "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/sandbox"
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc"
+chmod 3770 "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc"
+
+touch "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/"{inbox,outbox}.md
+chown "${USER_NAME}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/inbox.md"
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/outbox.md"
+chmod 660 "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/"*.md
+
+# --- 7. FINAL LOCKDOWN ---
+chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/sandbox" "${TOS_MNT_ROOT}/.local/bin"
+chmod -R 700 "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/sandbox"
+chmod -R 750 "${TOS_MNT_ROOT}/.local/bin"
+
+chown root:"${AI_USER}" "${TOS_MNT_ROOT}"
+chmod 750 "${TOS_MNT_ROOT}"
+
+echo "--- DEPLOYMENT REPORT ---"
+tree -a -L 6 -pug -I '.git' "${TOS_MNT_ROOT}"
+
+echo ""
+echo "✅ Deployment complete. Root privileges confirmed and applied."

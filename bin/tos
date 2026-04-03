@@ -1,7 +1,40 @@
 #!/bin/zsh
-source "/mnt/team_of_six/.local/conf/config"
+# ==============================================================================
+# Title: The Global Gateway (Master Execution & Lifecycle Controller)
+#
+# Usage Explanation: This is the entry point for all engine commands. The human 
+# Architect runs this directly (NO SUDO). It acts as a bouncer, verifies group 
+# membership, and securely escalates to the Ghost user. Only after escalation 
+# does it load configuration and process the workspace.
+# ==============================================================================
 
+# Source config first — readable by all group members (r--r----- team_of_six:team_of_six).
+# All bootstrap variables are derived from it; nothing is hardcoded here.
+source "$(cd "$(dirname "$0")/../conf" && pwd)/config"
+
+# --- 2. ZSH FORCE (The Handover) ---
+if [ -z "$ZSH_VERSION" ]; then
+    exec zsh "$0" "$@"
+fi
+
+# ==============================================================================
+# STAGE 1: THE BOUNCER (Runs as Human)
+# ==============================================================================
 if [[ "$USER" != "$AI_USER" ]]; then
+
+    # 1. Enforce "No Sudo" policy. The human must call this natively.
+    if [[ -n "$SUDO_USER" || "$EUID" -eq 0 ]]; then
+        echo "🚨 ERROR: Do not run this command with sudo. Run it as your normal user."
+        exit 1
+    fi
+
+    # 2. Verify Group Membership directly
+    if ! id -nG "$USER" | grep -qw "$AI_GROUP"; then
+        echo -e "\n❌ \033[1;31mACCESS DENIED: You are not a member of the $AI_GROUP group.\033[0m"
+        exit 1
+    fi
+
+    # 3. Escalate Privilege securely (Relies on /etc/sudoers.d/ configuration)
     if sudo -n -u "$AI_USER" "$TOS_BIN/tos" "$@"; then
         exit $?
     else
@@ -10,12 +43,19 @@ if [[ "$USER" != "$AI_USER" ]]; then
     fi
 fi
 
+# ==============================================================================
+# STAGE 2: THE GHOST (Runs as AI_USER)
+# ==============================================================================
+# Config is already sourced above — no second source needed.
+
+# Capture the real human user who triggered the escalation for workspace routing
 [[ -z "$SUDO_USER" ]] && { echo "❌ ERROR: SUDO_USER is not defined."; exit 1; }
 
 source "$TOS_BIN/utils/error_trap.sh"
 
 PROJECT_NAME="$1"
 MODULE="$2"
+ACTION="$3" # Capture the action explicitly
 shift 2 
 
 [[ -z "$PROJECT_NAME" || -z "$MODULE" ]] && { echo "Usage: tos <project> <work|write>"; exit 1; }
@@ -24,8 +64,29 @@ mkdir -p "$TOS_IPC" 2>/dev/null || true
 export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
 export TOS_CONTROLLER_LOCKED="true"
 
-case "$MODULE" in
-    "work")  "$TOS_BIN/work/tos" "$PROJECT_NAME" "$@" ;;
-    "write") "$TOS_BIN/write/tos" "$PROJECT_NAME" "$@" ;;
-    *)       echo "Usage: tos <project> <work|write>" ;;
-esac
+# === GLOBAL LIFECYCLE MANAGEMENT ===
+export TOS_PARSE_DIR="$TOS_IPC/parse_$$"
+mkdir -p "$TOS_PARSE_DIR"
+
+# Ensure the temp directory is ALWAYS destroyed when the script exits
+trap 'rm -rf "$TOS_PARSE_DIR"' EXIT
+
+# setopt pipefail ensures a non-zero exit from the {} block propagates
+# through the pipe to tee, rather than being swallowed. Without this,
+# set -e from error_trap.sh cannot see module failures.
+setopt pipefail
+
+# Route to the requested module, teeing all stdout+stderr into the outbox journal
+{
+    case "$MODULE" in
+        "work")  "$TOS_BIN/work/tos" "$PROJECT_NAME" "$@" ;;
+        "write") "$TOS_BIN/write/tos" "$PROJECT_NAME" "$@" ;;
+        *)       echo "Usage: tos <project> <work|write>"; exit 1 ;;
+    esac
+} 2>&1 | tee -a "$TOS_CONTEXT"
+
+# In zsh pipestatus is 1-indexed: [1] = the {} block, [2] = tee.
+# We want the module's exit code, not tee's.
+EXIT_CODE=${pipestatus[1]}
+
+exit $EXIT_CODE
