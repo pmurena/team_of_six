@@ -13,7 +13,7 @@ fi
 GIT_USER=$(gh api user -q .login)
 SANDBOX_ROOT="/mnt/team_of_six/tos_home/$USER/sandbox"
 
-for repo in tos-calc-test-*; do
+for repo in tos-trinity-test-*; do
     if [ -d "$repo" ]; then
         echo "Trying to delete remote: $GIT_USER/$repo"
         
