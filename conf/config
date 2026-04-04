@@ -17,9 +17,3 @@ if [[ -n "$SUDO_USER" ]]; then
     export TOS_INPUT="$TOS_IPC/inbox.md"
     export TOS_CONTEXT="$TOS_IPC/outbox.md"
 fi
-
-# --- GitHub CLI Authentication ---
-TOKEN_FILE="$TOS_MNT_ROOT/.local/conf/.token"
-if [[ -f "$TOKEN_FILE" ]]; then
-    export GH_TOKEN="$(cat "$TOKEN_FILE")"
-fi

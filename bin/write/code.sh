@@ -56,8 +56,9 @@ if [[ ${#FILE_ITEMS[@]} -gt 0 ]]; then
     echo "⚡ STAGE 2: WRITING ${#FILE_ITEMS[@]} FILES"
     for item_dir in "${FILE_ITEMS[@]}"; do
         FILE_PATH=$(cat "$item_dir/_TARGET.txt" 2>/dev/null)
-        # [SECURITY] Path Traversal Protection
-        if [[ -z "$FILE_PATH" || "$FILE_PATH" =~ \.\. || "$FILE_PATH" =~ ^/ ]]; then
+        
+        # [SECURITY] Path Traversal Protection - Fixed for native Zsh
+        if [[ -z "$FILE_PATH" || "$FILE_PATH" == *..* || "$FILE_PATH" == /* ]]; then
             echo "🚨 SEC-FAULT: Illegal or missing file path detected."
             exit 1
         fi
@@ -82,6 +83,7 @@ git commit -m "$TITLE\n\n$BODY\n\nFixes #$ISSUE_ID"
 
 set -x
 if git push origin "$CURRENT_BRANCH" --force-with-lease; then
+    # The GH_TOKEN is safely provided by the master bin/tos gateway
     if gh pr view "$CURRENT_BRANCH" &>/dev/null; then
         gh pr edit "$CURRENT_BRANCH" --title "$PR_TITLE" --body "$BODY"
     else

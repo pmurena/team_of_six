@@ -59,7 +59,8 @@ fi
 : "${AI_USER:?Config Error: AI_USER must be defined in $CONFIG_FILE}"
 : "${AI_GROUP:?Config Error: AI_GROUP must be defined in $CONFIG_FILE}"
 
-# Internal source
+# Capture the real human user running sudo
+HUMAN_USER="${SUDO_USER:-$USER}"
 SOURCE_BIN="./bin/"
 
 [[ -t 0 ]] && clear
@@ -76,49 +77,62 @@ cat << 'EOF'
 ==========================================================
 EOF
 
-# --- 5. MIRRORING ---
-echo "[*] Mirroring binaries to $TOS_MNT_ROOT..."
+# --- 5. DIRECTORY ARCHITECTURE ---
+echo "[*] STEP 1: Creating Directory Structure..."
 
 mkdir -p "${TOS_MNT_ROOT}/.local/bin"
 mkdir -p "${TOS_MNT_ROOT}/.local/conf"
+mkdir -p "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc"
+mkdir -p "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/sandbox"
+
+# --- 6. FILE COPY & MIRRORING ---
+echo "[*] STEP 2: Copying Engine Files & Configuration..."
 
 if [[ -d "$SOURCE_BIN" ]]; then
-    {
-      rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/"
-    } | tee -a "${TOS_MNT_ROOT}/deploy.log"
+    # Mirror Binaries
+    rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/" >/dev/null
 else
     echo "❌ ERROR: Source directory '$SOURCE_BIN' not found."
     exit 1
 fi
 
-# --- 6. PERMISSIONS & IPC HARDENING ---
-echo "[*] Securing IPC bridge and Sandbox for user: $USER_NAME"
+# Copy Config and initialize Token/IPC files
+cp "$CONFIG_FILE" "${TOS_MNT_ROOT}/.local/conf/config"
+touch "${TOS_MNT_ROOT}/.local/conf/.token"
+touch "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/"{inbox,outbox}.md
 
-touch "${TOS_MNT_ROOT}/.local/conf/config" "${TOS_MNT_ROOT}/.local/conf/.token"
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.local/conf/config" "${TOS_MNT_ROOT}/.local/conf/.token"
-chmod 440 "${TOS_MNT_ROOT}/.local/conf/config"
-chmod 400 "${TOS_MNT_ROOT}/.local/conf/.token"
 
-mkdir -p "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc"
-mkdir -p "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/sandbox"
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc"
-chmod 3770 "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc"
+# --- 7. SECURITY PERIMETER LOCKDOWN ---
+echo "[*] STEP 3: Enforcing Security Perimeters..."
 
-touch "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/"{inbox,outbox}.md
-chown "${USER_NAME}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/inbox.md"
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/outbox.md"
-chmod 660 "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/.ipc/"*.md
-
-# --- 7. FINAL LOCKDOWN ---
-chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/sandbox" "${TOS_MNT_ROOT}/.local/bin"
-chmod -R 700 "${TOS_MNT_ROOT}/tos_home/${USER_NAME}/sandbox"
-chmod -R 750 "${TOS_MNT_ROOT}/.local/bin"
-
+# Root Mount
 chown root:"${AI_USER}" "${TOS_MNT_ROOT}"
 chmod 750 "${TOS_MNT_ROOT}"
 
+# Binaries
+chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.local/bin"
+chmod -R 750 "${TOS_MNT_ROOT}/.local/bin"
+
+# Configurations
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.local/conf/config" "${TOS_MNT_ROOT}/.local/conf/.token"
+chmod 640 "${TOS_MNT_ROOT}/.local/conf/config" # Readable by human via group
+chmod 400 "${TOS_MNT_ROOT}/.local/conf/.token" # AI locked
+
+# IPC Bridge
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc"
+chmod 3770 "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc" # Sticky bits for shared reading
+
+chown "${HUMAN_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/inbox.md"
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/outbox.md"
+chmod 660 "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/"*.md
+
+# Sandbox (Air-gapped)
+chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/sandbox"
+chmod -R 700 "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/sandbox"
+
+echo ""
 echo "--- DEPLOYMENT REPORT ---"
 tree -a -L 6 -pug -I '.git' "${TOS_MNT_ROOT}"
 
 echo ""
-echo "✅ Deployment complete. Root privileges confirmed and applied."
+echo "✅ Deployment sequence complete. Sandbox secured for $HUMAN_USER."

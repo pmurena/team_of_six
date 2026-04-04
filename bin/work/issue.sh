@@ -18,11 +18,24 @@ git clean -fd &>/dev/null
 
 git checkout main && git pull origin main &>/dev/null
 echo "🚀 Routing Ghost to Workspace: $BRANCH_NAME"
-git checkout -B "$BRANCH_NAME"
+
+# [FIX] Sync existing workspace or create a new one from main.
+if git rev-parse --verify "origin/$BRANCH_NAME" >/dev/null 2>&1; then
+    git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME" &>/dev/null
+else
+    git checkout -b "$BRANCH_NAME" &>/dev/null
+fi
 
 {
     echo "# WORK CONTEXT: ISSUE $ISSUE_ID (Branch: $BRANCH_NAME)\n"
     gh issue view "$ISSUE_ID" --comments 2>&1
+    
+    # [NEW] Fetch PR Context & Comments if the PR exists
+    if gh pr view "$BRANCH_NAME" &>/dev/null; then
+        echo -e "\n## PULL REQUEST CONTEXT & COMMENTS"
+        gh pr view "$BRANCH_NAME" --comments 2>&1
+    fi
+
     echo -e "\n## CURRENT DIFF (origin/main...HEAD)"
     git diff origin/main...HEAD
     echo -e "\n## REPOSITORY SIGNATURE MAP"

@@ -19,15 +19,24 @@ INBOX="$TOS_MNT/tos_home/$USER/.ipc/inbox.md"
 OUTBOX="$TOS_MNT/tos_home/$USER/.ipc/outbox.md"
 TOS_BIN="$TOS_MNT/.local/bin/tos"
 
-# Colors for UX
+# --- Advanced UX Colors & Formatting ---
+NC='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
+
+# Foreground
 CYAN='\033[1;36m'
 GREEN='\033[1;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[1;34m'
 PURPLE='\033[1;35m'
-DIM='\033[2m'
 PROMPT_COLOR='\033[1;33m'
-NC='\033[0m'
+
+# Backgrounds for extreme visibility
+BG_PURPLE='\033[45;97m' # Architect
+BG_CYAN='\033[46;30m'   # Ghost
+BG_YELLOW='\033[43;30m' # Inbox
+BG_BLUE='\033[44;97m'   # Outbox / Git
 
 command -v gh >/dev/null 2>&1 || { echo "🚨 ERROR: 'gh' CLI required."; exit 1; }
 [[ ! -x "$TOS_BIN" ]] && { echo "🚨 ERROR: tos engine not found at $TOS_BIN"; exit 1; }
@@ -41,13 +50,27 @@ function present_chapter() {
     echo -e "${CYAN}==============================================================================${NC}\n"
     echo -ne "${PROMPT_COLOR}🚀 Press [Enter] to execute this step, or [Ctrl+C] to abort... ${NC}"
     read -r
-    echo -e "\n⚙️  Executing commands...\n"
 }
 
-function show_architect_action() { echo -e "${PURPLE}👤 [Architect]${NC} $1"; }
-function show_ipc_inbox()        { echo -e "${YELLOW}📤 [IPC INBOX]${NC}  $1"; }
-function show_ipc_outbox()       { echo -e "${BLUE}📥 [IPC OUTBOX]${NC} $1"; }
-function show_payload() { echo -e "${DIM}"; echo "$1" | sed 's/^/  │ /'; echo -e "${NC}"; }
+# The "Shine as Fire" highlighting functions
+function show_architect_action() { echo -e "\n${BOLD}${BG_PURPLE} 🧑‍💻 ARCHITECT (Human) ${NC} ${PURPLE}$1${NC}"; }
+function show_ghost_action()     { echo -e "\n${BOLD}${BG_CYAN} 👻 GHOST ENGINE (tos) ${NC} ${CYAN}$1${NC}"; }
+function show_git_diff()         { echo -e "\n${BOLD}${BG_BLUE} 🔍 REPOSITORY DIFF ${NC}\n"; git diff --color=always; }
+
+function show_ipc_inbox() { 
+    echo -e "\n${BOLD}${BG_YELLOW} 📤 IPC INBOX (Writing Payload) ${NC} ${YELLOW}Routing text to $INBOX...${NC}"
+}
+
+function show_ipc_outbox() { 
+    echo -e "\n${BOLD}${BG_BLUE} 📥 IPC OUTBOX (Reading Context) ${NC} ${BLUE}$1${NC}"
+}
+
+function show_payload() { 
+    echo -e "${DIM}┌───────────────────────────────────────────────────────────────────────"
+    echo "$1" | sed 's/^/│  /'
+    echo -e "└───────────────────────────────────────────────────────────────────────${NC}"
+}
+
 function pause_for_reading() { echo -ne "\n${PROMPT_COLOR}📖 Press [Enter] to continue... ${NC}"; read -r; }
 
 # ==============================================================================
@@ -62,16 +85,18 @@ so we can test Stage 6 (Retro/Evolution).
 EOF
 )
 present_chapter "$CH0"
+
 show_architect_action "Creating local repository and base files..."
 mkdir "$TEST_REPO" && cd "$TEST_REPO"
-git init
+git init >/dev/null
 
 echo "# TOS Interactive Tutorial" > README.md
 echo "log() { echo \"[LOG] \$1\"; }" > utils.zsh
 mkdir llm_agents
 echo "Rule 1: Be helpful." > llm_agents/team_of_six.md
 
-git add . && git commit -m "Initial commit"
+git add . && git commit -m "Initial commit" >/dev/null
+show_architect_action "Pushing repo to GitHub ($TEST_REPO)..."
 gh repo create "$TEST_REPO" --private --source=. --remote=origin --push
 echo -e "${GREEN}✅ Repository initialized and pushed to GitHub.${NC}"
 pause_for_reading
@@ -87,6 +112,8 @@ We clone the remote truth into the Ghost's secure, air-gapped environment.
 EOF
 )
 present_chapter "$CH1"
+
+show_ghost_action "Executing: tos $TEST_REPO work start"
 "$TOS_BIN" "$TEST_REPO" work start
 pause_for_reading
 
@@ -112,10 +139,13 @@ BODY=Implement subtract() returning difference.
 ===TOS_ISSUE_END===
 EOF
 )
+
+show_ipc_inbox
 show_payload "$PAYLOAD"
 echo "$PAYLOAD" > "$INBOX"
+
+show_ghost_action "Executing: tos $TEST_REPO work new"
 "$TOS_BIN" "$TEST_REPO" work new
-sleep 2 
 pause_for_reading
 
 # ==============================================================================
@@ -129,6 +159,8 @@ We route the Ghost to focus exclusively on Issue #1.
 EOF
 )
 present_chapter "$CH3"
+
+show_ghost_action "Executing: tos $TEST_REPO work 1"
 "$TOS_BIN" "$TEST_REPO" work 1
 pause_for_reading
 
@@ -144,9 +176,11 @@ The Architect injects it directly into the Outbox context.
 EOF
 )
 present_chapter "$CH4"
-show_architect_action "Injecting utils.zsh into the context..."
+
+show_architect_action "Executing: tos $TEST_REPO work peek utils.zsh"
 "$TOS_BIN" "$TEST_REPO" work peek utils.zsh
-echo -e "${GREEN}✅ utils.zsh appended to outbox.md${NC}"
+
+show_ipc_outbox "Outbox securely updated with utils.zsh file contents."
 pause_for_reading
 
 # ==============================================================================
@@ -174,10 +208,13 @@ if [[ "$(add 2 3 2>/dev/null)" != "5" ]]; then exit 1; fi
 ===TOS_FILE_END===
 EOF
 )
+
+show_ipc_inbox
 show_payload "$PAYLOAD"
 echo "$PAYLOAD" > "$INBOX"
+
+show_ghost_action "Executing: tos $TEST_REPO write code"
 "$TOS_BIN" "$TEST_REPO" write code
-sleep 2
 pause_for_reading
 
 # ==============================================================================
@@ -186,15 +223,18 @@ pause_for_reading
 CH6=$(cat << 'EOF'
 # Chapter 6: The Architect's Async Review
 
-The Architect leaves three tags:
+The Architect reviews the code on GitHub and leaves three tags:
 1. `[QUESTION]` on the Issue thread.
 2. `[FIXME]` inline in the code.
 3. `[TODO]` inline in the code (Scope Creep).
 EOF
 )
 present_chapter "$CH6"
-gh issue comment 1 -b "[QUESTION] Should we support floats?"
-gh pr checkout tos-work-1
+
+show_architect_action "Simulating manual PR review and Git edits..."
+gh issue comment 1 -b "[QUESTION] Should we support floats?" >/dev/null
+gh pr checkout tos-work-1 >/dev/null 2>&1
+
 cat << 'EOF' > test_calculator.zsh
 #!/bin/zsh
 source ./utils.zsh
@@ -204,8 +244,11 @@ source ./calculator.zsh 2>/dev/null || true
 log "Running tests..."
 if [[ "$(add 2 3 2>/dev/null)" != "5" ]]; then exit 1; fi
 EOF
-git add test_calculator.zsh && git commit -m "Review tags" && git push origin tos-work-1
-sleep 2
+
+git add test_calculator.zsh && git commit -m "Architect: Review tags" >/dev/null
+git push origin tos-work-1 >/dev/null 2>&1
+
+show_git_diff
 pause_for_reading
 
 # ==============================================================================
@@ -214,13 +257,15 @@ pause_for_reading
 CH7=$(cat << 'EOF'
 # Chapter 7: Ghost Async Processing (Comments & Deferrals)
 
-The Ghost syncs, sees the tags, and outputs TWO batch payloads:
+The Ghost syncs the workspace, sees the tags, and outputs TWO batch payloads:
 1. `tos write comment` to answer the [QUESTION].
 2. `tos work new` to defer the [TODO] into a new Issue (#3).
 EOF
 )
 present_chapter "$CH7"
-"$TOS_BIN" "$TEST_REPO" work 1
+
+show_ghost_action "Syncing Workspace Context (tos $TEST_REPO work 1)"
+"$TOS_BIN" "$TEST_REPO" work 1 >/dev/null
 
 PAYLOAD_COMMENT=$(cat << 'EOF'
 ===TOS_COMMENT_START===
@@ -229,7 +274,11 @@ BODY=**[QUESTION]:** Sticking to integers for now.
 ===TOS_COMMENT_END===
 EOF
 )
+show_ipc_inbox
+show_payload "$PAYLOAD_COMMENT"
 echo "$PAYLOAD_COMMENT" > "$INBOX"
+
+show_ghost_action "Executing: tos $TEST_REPO write comment"
 "$TOS_BIN" "$TEST_REPO" write comment
 
 PAYLOAD_TODO=$(cat << 'EOF'
@@ -239,9 +288,12 @@ BODY=Deferred from PR #1 review. Implement division.
 ===TOS_ISSUE_END===
 EOF
 )
+show_ipc_inbox
+show_payload "$PAYLOAD_TODO"
 echo "$PAYLOAD_TODO" > "$INBOX"
+
+show_ghost_action "Executing: tos $TEST_REPO work new"
 "$TOS_BIN" "$TEST_REPO" work new
-sleep 2
 pause_for_reading
 
 # ==============================================================================
@@ -272,9 +324,12 @@ add() { echo $(($1 + $2)); }
 ===TOS_FILE_END===
 EOF
 )
+show_ipc_inbox
+show_payload "$PAYLOAD_CODE"
 echo "$PAYLOAD_CODE" > "$INBOX"
+
+show_ghost_action "Executing: tos $TEST_REPO write code"
 "$TOS_BIN" "$TEST_REPO" write code
-sleep 3
 pause_for_reading
 
 # ==============================================================================
@@ -303,9 +358,12 @@ Rule 2: Always use $(()) for native Zsh math.
 ===TOS_FILE_END===
 EOF
 )
+show_ipc_inbox
+show_payload "$PAYLOAD_DOCS"
 echo "$PAYLOAD_DOCS" > "$INBOX"
+
+show_ghost_action "Executing: tos $TEST_REPO write code"
 "$TOS_BIN" "$TEST_REPO" write code
-sleep 3
 pause_for_reading
 
 # ==============================================================================
@@ -315,16 +373,22 @@ clear
 CH10=$(cat << 'EOF'
 # Chapter 10: Architect Merge & Epilogue
 
-We pull, verify the local tests, and merge the branch!
+We pull the Ghost's work, verify the local tests, and merge the branch!
 EOF
 )
 echo -e "${CYAN}==============================================================================${NC}"
 echo -e "$CH10"
 echo -e "${CYAN}==============================================================================${NC}\n"
 
-git pull origin tos-work-1
+show_architect_action "Pulling remote branch and running tests..."
+git pull origin tos-work-1 >/dev/null 2>&1
+show_git_diff
+
+echo -e "\n${BOLD}${BG_PURPLE} ⚙️ RUNNING TESTS ${NC}"
 zsh ./test_calculator.zsh && echo -e "${GREEN}✅ Local tests passed.${NC}"
-gh pr merge tos-work-1 --merge --delete-branch
+
+show_architect_action "Merging PR via GitHub CLI..."
+gh pr merge tos-work-1 --merge --delete-branch >/dev/null
 
 # --- The Transcript Generation ---
 TRANSCRIPT=$(cat << 'EOF'
@@ -347,14 +411,15 @@ echo -ne "\n${PROMPT_COLOR}🗑️  Do you want to delete the test repository ($
 read -r DELETE_CHOICE
 
 if [[ "$DELETE_CHOICE" =~ ^[Yy]$ ]]; then
-    gh repo delete "$TEST_REPO" --yes
+    show_architect_action "Cleaning up environment..."
+    gh repo delete "$TEST_REPO" --yes >/dev/null 2>&1
     cd .. && rm -rf "$TEST_REPO"
     echo -e "${GREEN}✅ Teardown complete. Environment is clean.${NC}"
 else
     echo -e "\n📝 Injecting full transcript into README.md..."
     echo -e "\n$TRANSCRIPT" >> README.md
     git add README.md
-    git commit -m "docs: attach tutorial transcript"
-    git push origin main
+    git commit -m "docs: attach tutorial transcript" >/dev/null
+    git push origin main >/dev/null 2>&1
     echo -e "📁 ${BLUE}Repository kept for inspection.${NC} You can view the log locally at ./$TEST_REPO"
 fi

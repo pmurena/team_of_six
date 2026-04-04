@@ -75,6 +75,9 @@ trap 'rm -rf "$TOS_PARSE_DIR"' EXIT
 # through the pipe to tee, rather than being swallowed. Without this,
 # set -e from error_trap.sh cannot see module failures.
 setopt pipefail
+# [SECURITY] Just-In-Time Token Injection for the GH CLI
+# The token only exists in memory while the specific sub-module executes.
+export GH_TOKEN="$(cat "$TOS_CONF/.token" 2>/dev/null)"
 
 # Route to the requested module, teeing all stdout+stderr into the outbox journal
 {
@@ -88,5 +91,7 @@ setopt pipefail
 # In zsh pipestatus is 1-indexed: [1] = the {} block, [2] = tee.
 # We want the module's exit code, not tee's.
 EXIT_CODE=${pipestatus[1]}
+
+unset GH_TOKEN
 
 exit $EXIT_CODE
