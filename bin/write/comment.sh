@@ -5,7 +5,7 @@
 # Usage Explanation: Triggered by `tos <project> write comment`. It calls the 
 # Universal Reader to extract `COMMENT` blocks into `$TOS_PARSE_DIR`, looking 
 # for `TARGET` (the Issue/PR ID) and `BODY`. It iterates through the objects, 
-# posting each comment to the corresponding GitHub thread using `gh issue comment`, 
+# posting each comment to the corresponding GitHub thread using `gh issue/pr comment`, 
 # and safely appends the posted text to the local `outbox.md` context.
 # ==============================================================================
 
@@ -36,11 +36,22 @@ for item_dir in "${ITEM_DIRS[@]}"; do
 
     if [[ -n "$TARGET" && -f "$BODY_FILE" ]]; then
         echo "✨ Posting comment to #$TARGET"
-        if gh issue comment "$TARGET" --body-file "$BODY_FILE"; then
-            echo -e "\n## GHOST COMMENT POSTED TO #$TARGET:\n" >> "$TOS_CONTEXT"
-            cat "$BODY_FILE" >> "$TOS_CONTEXT"
+        
+        # Check if the target is a PR first
+        if gh pr view "$TARGET" &>/dev/null; then
+            if gh pr comment "$TARGET" --body-file "$BODY_FILE"; then
+                echo -e "\n## GHOST COMMENT POSTED TO PR #$TARGET:\n" >> "$TOS_CONTEXT"
+                cat "$BODY_FILE" >> "$TOS_CONTEXT"
+            else
+                echo "❌ ERROR: Failed to post comment to PR #$TARGET."
+            fi
         else
-            echo "❌ ERROR: Failed to post comment to #$TARGET."
+            if gh issue comment "$TARGET" --body-file "$BODY_FILE"; then
+                echo -e "\n## GHOST COMMENT POSTED TO ISSUE #$TARGET:\n" >> "$TOS_CONTEXT"
+                cat "$BODY_FILE" >> "$TOS_CONTEXT"
+            else
+                echo "❌ ERROR: Failed to post comment to Issue #$TARGET."
+            fi
         fi
     else
         echo "⚠️ Warning: Skipping malformed comment block."

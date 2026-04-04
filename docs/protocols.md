@@ -15,4 +15,4 @@ Used to break down scope and create new GitHub Issues.
 * The Engine parses these blocks and executes `gh issue create` for each block.
 
 ## 3. Comment Protocol (`tos write comment`)
-Used to post thread replies or diagnostics directly to a GitHub Issue. Requires no synthetic tags; standard markdown is streamed via `gh issue comment`.
+Used to post thread replies or diagnostics directly to a GitHub Issue or Pull Request. Requires no synthetic tags; standard markdown is streamed via `gh issue comment` or `gh pr comment` depending on the target ID.

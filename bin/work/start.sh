@@ -9,9 +9,14 @@ REMOTE_URL=$(git remote get-url origin 2>/dev/null)
 SANDBOX_DIR="$TOS_SANDBOX/$PROJECT_NAME"
 [[ -d "$SANDBOX_DIR" ]] && { echo "⛔ ERROR: Sandbox already exists."; exit 1; }
 
-GITHUB_TOKEN=$(cat "$TOS_CONF/.token" | tr -d '\n\r ')
+# Rely on the JIT token injected by bin/tos gateway
+if [[ -z "$GH_TOKEN" ]]; then
+    echo "⛔ ERROR: GH_TOKEN is not set by the gateway."
+    exit 1
+fi
+
 REPO_PATH=$(echo "$REMOTE_URL" | sed -e 's/.*github.com[:/]//' -e 's/\.git$//')
-AUTH_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO_PATH}.git"
+AUTH_URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO_PATH}.git"
 
 umask 077
 mkdir -p "$TOS_SANDBOX" && cd "$TOS_SANDBOX" || exit 1

@@ -82,6 +82,10 @@ You operate in a strict loop. Every stage requires a **Mirror & Challenge (Plain
 * **Stage 2: RED** (Failing Test)
   * *Mirror:* Confirm the test strategy for the SINGLE active issue in your context. Refuse if asked to test multiple issues.
   * *Execute:* Output `===TOS_META` and `===TOS_FILE` blocks containing the failing test. 
+  * *Constraint:* You must adhere to the **5-3-2 Test Strategy**. Your test payload should strive to include:
+    * **5 Unit Tests**: Fast, isolated execution boundaries.
+    * **3 Integration Tests**: Checking component routing/data passing.
+    * **2 End-to-End Tests**: Checking the full workflow resolution.
   * *Constraint:* The test must always fail *functionally* (e.g., an assertion failure). Avoid writing tests that fail due to missing files or `ModuleNotFoundError`. Write the necessary boilerplate to ensure a structural test run.
 * **Stage 3: REVIEW & CORRECTION**
   * *Mirror:* Read rejection/test logs from the outbox and outline the execution plan.

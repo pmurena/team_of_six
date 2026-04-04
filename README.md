@@ -20,23 +20,15 @@ TOS operates on a strict separation of powers:
 * `plugins/`: NeoVim integration and IPC bridge.
 
 ## 🚀 Quick Start
-1. **Deploy the Infrastructure:**
+1. **Deploy the Infrastructure & Auto-Provision User:**
 
     ```bash
     sudo ./inf/tos_deploy.sh
     ```
    
-   This scaffolds the architecture, creates the AI user/group, and applies strict permission topologies.
+   This scaffolds the architecture, creates the AI user/group, applies strict permission topologies, and automatically configures the `sudoers` perimeter for the human user running the script.
 
-2. **Add a User:**
-
-    ```bash
-    sudo ./inf/tos_add_user.sh <username>
-    ```
-   
-   This adds the user to the AI group and configures the `sudoers` perimeter.
-
-3. **Supply the GitHub Token (The Airlock Key):**
+2. **Supply the GitHub Token (The Airlock Key):**
    
    The Ghost requires a GitHub Personal Access Token (Classic) with `repo` and `read:org` scopes to clone and manage issues. You must place this in the engine's secure config folder.
 
@@ -46,7 +38,7 @@ TOS operates on a strict separation of powers:
     sudo chmod 400 /mnt/team_of_six/.local/conf/.token
     ```
 
-4. **Provision a Project:**
+3. **Provision a Project:**
 
     ```bash
     tos <project_name> work start

@@ -136,3 +136,8 @@ tree -a -L 6 -pug -I '.git' "${TOS_MNT_ROOT}"
 
 echo ""
 echo "✅ Deployment sequence complete. Sandbox secured for $HUMAN_USER."
+
+echo ""
+echo "[*] STEP 4: Auto-Provisioning User Environment..."
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+zsh "$SCRIPT_DIR/tos_add_user.sh" "$HUMAN_USER"

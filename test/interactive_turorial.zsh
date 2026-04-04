@@ -187,7 +187,7 @@ terminal_view "grep -A 5 'PEEK' outbox.md" "$(grep -A 5 "## SURGICAL CONTEXT INJ
 CH5=$(cat << 'EOF'
 # Chapter 5: The Red Phase
 
-Goal: Enforce TDD using the 5-3-2 Test Strategy (Unit/Int/E2E).
+Goal: Enforce TDD using the 5-3-2 Test Strategy (5 Unit, 3 Int, 2 E2E).
 Role: Team_of_Six (Agent / Doer)
 EOF
 )
@@ -228,46 +228,55 @@ EOF
 )
 present_chapter "$CH6"
 
-show_role "$YELLOW" "ARCHITECT" "Injecting [QUESTION], [FIXME], and [TODO] tags..."
+show_role "$YELLOW" "ARCHITECT" "Checking out Ghost PR branch and injecting tags..."
+git fetch origin -q
+git checkout tos-work-1 -q
 gh issue comment 1 -b "[QUESTION] Support negative numbers?" >/dev/null
 sed -i 's/add 5 5/add 5 5 # [FIXME] logic missing/' test_calculator.zsh
 echo "# [TODO] Implement divide() later." >> README.md
-git commit -am "Architect review" -q && git push origin -q
+git commit -am "Architect review" -q && git push origin tos-work-1 -q
 
 show_role "$PURPLE" "GHOST" "Syncing tags back to Agent context..."
 "$TOS_BIN" "$TEST_REPO" work 1 >/dev/null
 
-show_role "$CYAN" "AGENT" "Tags detected. I will now issue a COMMENT and a new ISSUE turn."
-PAYLOAD_ROUTING=$(cat << 'EOF'
+show_role "$CYAN" "AGENT" "Tags detected. I will output a COMMENT payload first to answer the question."
+PAYLOAD_COMMENT=$(cat << 'EOF'
 ===TOS_COMMENT_START===
 TARGET=1
 BODY=**[QUESTION]**: Negative numbers are supported by native shell math.
 ===TOS_COMMENT_END===
+EOF
+)
+echo "$PAYLOAD_COMMENT" > "$TOS_INPUT"
+"$TOS_BIN" "$TEST_REPO" write comment >/dev/null
+
+show_role "$YELLOW" "ARCHITECT" "Notice the Engine wiped the Inbox after executing the comment. This prevents double-posting!"
+show_role "$CYAN" "AGENT" "Now outputting the ISSUE payload for the deferred task."
+PAYLOAD_ISSUE=$(cat << 'EOF'
 ===TOS_ISSUE_START===
 TITLE=Implement divide()
 BODY=Deferred from PR #1 feedback.
 ===TOS_ISSUE_END===
 EOF
 )
-echo "$PAYLOAD_ROUTING" > "$TOS_INPUT"
-"$TOS_BIN" "$TEST_REPO" write comment >/dev/null
+echo "$PAYLOAD_ISSUE" > "$TOS_INPUT"
 "$TOS_BIN" "$TEST_REPO" work new >/dev/null
 
-show_role "$YELLOW" "ARCHITECT" "Verified. Issue #3 created; scope creep deferred."
+show_role "$YELLOW" "ARCHITECT" "Verified. Comment posted and Issue #3 created safely in two stages."
 
 # ==============================================================================
-# CHAPTER 8: THE GREEN PHASE
+# CHAPTER 7: THE GREEN PHASE
 # ==============================================================================
-CH8=$(cat << 'EOF'
-# Chapter 8: The Green Phase (Completion)
+CH7=$(cat << 'EOF'
+# Chapter 7: The Green Phase (Completion)
 
-Goal: Reach functional implementation.
+Goal: Reach functional implementation and pass tests.
 Role: Team_of_Six (Agent / Doer)
 EOF
 )
-present_chapter "$CH8"
+present_chapter "$CH7"
 
-show_role "$CYAN" "AGENT" "Implementing calculator.zsh logic."
+show_role "$CYAN" "AGENT" "Implementing calculator.zsh logic to fix the failing test."
 PAYLOAD_GREEN=$(cat << 'EOF'
 ===TOS_META_START===
 TITLE=Green: implement add()
@@ -283,7 +292,65 @@ echo "$PAYLOAD_GREEN" > "$TOS_INPUT"
 "$TOS_BIN" "$TEST_REPO" write code >/dev/null
 
 show_role "$YELLOW" "ARCHITECT" "The diff is clean. The implementation matches the 'Wisdom'."
+
+# ==============================================================================
+# CHAPTER 8: STAGE 5 — REFACTOR & DOCS
+# ==============================================================================
+CH8=$(cat << 'EOF'
+# Chapter 8: Refactor Phase
+
+Goal: Clean up implementation and self-document before merging.
+Role: Team_of_Six (Agent / Doer)
+EOF
+)
+present_chapter "$CH8"
+
+show_role "$CYAN" "AGENT" "Refactoring and adding docstrings to calculator.zsh."
+PAYLOAD_REFACTOR=$(cat << 'EOF'
+===TOS_META_START===
+TITLE=Docs: add docstrings to add()
+BODY=Refactored syntax and documented standard usage constraints.
+===TOS_META_END===
+===TOS_FILE_START: calculator.zsh===
+#!/bin/zsh
+# Adds two integers using native Zsh math
+add() { echo $(( $1 + $2 )); }
+===TOS_FILE_END===
+EOF
+)
+echo "$PAYLOAD_REFACTOR" > "$TOS_INPUT"
+"$TOS_BIN" "$TEST_REPO" write code >/dev/null
+
+show_role "$YELLOW" "ARCHITECT" "Reviewing updated code..."
 terminal_view "cat calculator.zsh" "$(cat calculator.zsh)"
+
+# ==============================================================================
+# CHAPTER 9: STAGE 6 — RETROSPECTIVE
+# ==============================================================================
+CH9=$(cat << 'EOF'
+# Chapter 9: The Retrospective
+
+Goal: The Agent updates its own system prompts based on session learnings.
+Role: Team_of_Six (Agent / Doer)
+EOF
+)
+present_chapter "$CH9"
+
+show_role "$CYAN" "AGENT" "Proposing rules based on Architect's manual math injection..."
+PAYLOAD_RETRO=$(cat << 'EOF'
+===TOS_META_START===
+TITLE=Retro: Enforce parameter validation
+BODY=Update agent rules to always check param length before Zsh math evaluation.
+===TOS_META_END===
+===TOS_FILE_START: llm_agents/team_of_six.md===
+Rule 1: Use native Zsh math.
+Rule 2: Check integer count before math blocks.
+===TOS_FILE_END===
+EOF
+)
+echo "$PAYLOAD_RETRO" > "$TOS_INPUT"
+"$TOS_BIN" "$TEST_REPO" write code >/dev/null
+show_role "$YELLOW" "ARCHITECT" "Agent constraints evolved and committed."
 
 # ==============================================================================
 # CHAPTER 10: MERGE & TEARDOWN
@@ -298,7 +365,7 @@ EOF
 present_chapter "$CH10"
 
 show_role "$YELLOW" "ARCHITECT" "Pulling Ghost work and running final local tests..."
-git pull origin -q
+git pull origin tos-work-1 -q
 zsh ./test_calculator.zsh && echo -e "${GREEN}✅ Local tests passed.${NC}"
 
 show_role "$YELLOW" "ARCHITECT" "Merging PR and cleaning the sandbox."

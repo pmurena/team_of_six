@@ -286,9 +286,9 @@ For the next issue, repeat from Step 3: run `tos calculator work <ID>`.
 | `tos <project> work start` | Clone repo into sandbox, list open issues |
 | `tos <project> work <ID>` | Open workspace for issue ID, generate outbox context |
 | `tos <project> work new` | Parse inbox `TOS_ISSUE` blocks, create GitHub Issues |
-| `tos <project> work peek <files>` | Inject specific file contents into the outbox |
+| `tos <project> work peek <files>` | Append specific file contents to the outbox |
 | `tos <project> write code` | Parse inbox `TOS_META` + `TOS_FILE` blocks, push PR |
-| `tos <project> write comment` | Post inbox content as a comment on the active GitHub Issue |
+| `tos <project> write comment` | Post inbox content as a comment on the active GitHub Issue or Pull Request |
 
 ### Protocol Tags
 *(Must be output as raw text, never wrapped in markdown code fences)*
