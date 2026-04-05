@@ -1,13 +1,12 @@
 #!/bin/bash
 
 # --- 0. PRIVILEGE CHECK ---
-# Fail immediately if not root
 if [[ $EUID -ne 0 ]]; then
    echo "❌ ERROR: This script must be run as root (sudo)."
    exit 1
 fi
 
-# --- 1. DEPENDENCY CHECK (Initial Shell) ---
+# --- 1. DEPENDENCY CHECK ---
 REQUIRED_PKGS=("zsh" "git" "rsync" "gh" "tee" "touch" "tree" "chown" "chmod" "mkdir")
 
 MISSING_PKGS=()
@@ -22,7 +21,7 @@ if [ ${#MISSING_PKGS[@]} -ne 0 ]; then
     exit 1
 fi
 
-# --- 2. ZSH FORCE (The Handover) ---
+# --- 2. ZSH FORCE ---
 if [ -z "$ZSH_VERSION" ]; then
     exec zsh "$0" "$@"
 fi
@@ -44,22 +43,19 @@ if [[ ! -f "inf/tos_deploy.sh" ]]; then
     exit 1
 fi
 
-# --- 4. STRICT CONFIGURATION ---
+# --- 4. CONFIGURATION ---
 CONFIG_FILE="./conf/config"
 if [[ -f "$CONFIG_FILE" ]]; then
-    # Since we are root, we can safely source protected configs
     source "$CONFIG_FILE"
 else
     echo "❌ ERROR: Configuration file missing at $CONFIG_FILE"
     exit 1
 fi
 
-# Force validation of variables from config
 : "${TOS_MNT_ROOT:?Config Error: TOS_MNT_ROOT must be defined in $CONFIG_FILE}"
 : "${AI_USER:?Config Error: AI_USER must be defined in $CONFIG_FILE}"
 : "${AI_GROUP:?Config Error: AI_GROUP must be defined in $CONFIG_FILE}"
 
-# Capture the real human user running sudo
 HUMAN_USER="${SUDO_USER:-$USER}"
 SOURCE_BIN="./bin/"
 
@@ -71,7 +67,7 @@ cat << 'EOF'
     | | ___  __ _ _ __ ___  | |  | | |_ | (___  ___  __
     | |/ _ \/ _` | '_ ` _ \ | |  | |  _| \___ \| \ \/ /
     | |  __/ (_| | | | | | || |__| | |  ____) | |>  < 
-    |_|\___|\__,_|_| |_| |_| \____/|_|  |_____/|_/_/\_\
+    |_|\___|\_,_|_| |_| |_| \____/|_|  |_____/|_/_/\_\
 
  Deployment & Security Scaffolding (Root Verified)
 ==========================================================
@@ -80,27 +76,31 @@ EOF
 # --- 5. DIRECTORY ARCHITECTURE ---
 echo "[*] STEP 1: Creating Directory Structure..."
 
+# Global Control Plane
+mkdir -p "${TOS_MNT_ROOT}/.ipc/locks"
+mkdir -p "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
+
+# Engine
 mkdir -p "${TOS_MNT_ROOT}/.local/bin"
 mkdir -p "${TOS_MNT_ROOT}/.local/conf"
-mkdir -p "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc"
-mkdir -p "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/sandbox"
+
+# Flattened Execution Plane
+mkdir -p "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
 
 # --- 6. FILE COPY & MIRRORING ---
 echo "[*] STEP 2: Copying Engine Files & Configuration..."
 
 if [[ -d "$SOURCE_BIN" ]]; then
-    # Mirror Binaries
     rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/" >/dev/null
 else
     echo "❌ ERROR: Source directory '$SOURCE_BIN' not found."
     exit 1
 fi
 
-# Copy Config and initialize Token/IPC files
 cp "$CONFIG_FILE" "${TOS_MNT_ROOT}/.local/conf/config"
 touch "${TOS_MNT_ROOT}/.local/conf/.token"
-touch "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/"{inbox,outbox}.md
-
+touch "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/inbox.md"
+touch "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/outbox.md"
 
 # --- 7. SECURITY PERIMETER LOCKDOWN ---
 echo "[*] STEP 3: Enforcing Security Perimeters..."
@@ -115,20 +115,28 @@ chmod -R 750 "${TOS_MNT_ROOT}/.local/bin"
 
 # Configurations
 chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.local/conf/config" "${TOS_MNT_ROOT}/.local/conf/.token"
-chmod 640 "${TOS_MNT_ROOT}/.local/conf/config" # Readable by human via group
-chmod 400 "${TOS_MNT_ROOT}/.local/conf/.token" # AI locked
+chmod 640 "${TOS_MNT_ROOT}/.local/conf/config"
+chmod 400 "${TOS_MNT_ROOT}/.local/conf/.token"
 
-# IPC Bridge
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc"
-chmod 3770 "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc" # Sticky bits for shared reading
+# Global IPC root — ghost owns, group can enter
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc"
+chmod 750 "${TOS_MNT_ROOT}/.ipc"
 
-chown "${HUMAN_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/inbox.md"
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/outbox.md"
-chmod 660 "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/.ipc/"*.md
+# Locks dir — ghost owns exclusively
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc/locks"
+chmod 700 "${TOS_MNT_ROOT}/.ipc/locks"
 
-# Sandbox (Air-gapped)
-chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/sandbox"
-chmod -R 700 "${TOS_MNT_ROOT}/tos_home/${HUMAN_USER}/sandbox"
+# Per-user IPC ribbon
+chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
+chmod 3770 "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
+
+chown "${HUMAN_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/inbox.md"
+chown "${AI_USER}:${AI_GROUP}"    "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/outbox.md"
+chmod 660 "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/"*.md
+
+# Flattened Sandbox (Air-gapped)
+chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
+chmod -R 700 "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
 
 echo ""
 echo "--- DEPLOYMENT REPORT ---"

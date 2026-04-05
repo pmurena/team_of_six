@@ -1,24 +1,29 @@
 #!/bin/zsh
+# ==============================================================================
+# Title: Surgical Context Injector
+# Usage: tos <project> sync peek <files...>
+# ==============================================================================
 [[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
 
 PROJECT_NAME="$1"
 shift
 
-[[ $# -eq 0 ]] && { echo "Usage: tos <project> work peek <files...>"; exit 1; }
+[[ $# -eq 0 ]] && { echo "Usage: tos <project> sync peek <files...>"; exit 1; }
 
-cd "$TOS_WORKING_DIR" || exit 1
+cd "$TOS_SANDBOX/$PROJECT_NAME" || exit 1
 
-# Ensure we are actually on a Ghost workspace branch before peeking
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-[[ ! "$CURRENT_BRANCH" =~ ^tos-work- ]] && { echo "🚨 ERROR: Not on a tos-work branch. Run 'work <ID>' first."; exit 1; }
+[[ ! "$CURRENT_BRANCH" =~ ^tos-work- ]] && {
+    echo "🚨 ERROR: Not on a tos-work branch. Run 'sync trinity <ID>' first."
+    exit 1
+}
 
 {
     echo -e "\n---"
     echo "## SURGICAL CONTEXT INJECTION (PEEK)"
     echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "> Note: This context is appended. Repeated peeks across sessions may cause context drift. Run 'tos work <ID>' to clean and reset."
-    
-    # Loop over all requested files passed as arguments
+    echo "> Note: This context is appended. Run 'sync trinity <ID>' to clean and reset."
+
     for req_file in "$@"; do
         if [[ -f "$req_file" ]]; then
             echo -e "\n### File: \`$req_file\`\n\`\`\`"

@@ -1,0 +1,28 @@
+{
+  "module": "write",
+  "parsers": {
+    "META": {
+      "start": "===TOS_META_START===",
+      "end":   "===TOS_META_END===",
+      "mode":  "kv",
+      "keys":  ["TARGET_PROJECT", "TARGET_TRINITY", "TITLE", "BODY"]
+    },
+    "FILE": {
+      "start": "===TOS_FILE_START:",
+      "end":   "===TOS_FILE_END===",
+      "mode":  "raw"
+    },
+    "COMMENT": {
+      "start": "===TOS_COMMENT_START===",
+      "end":   "===TOS_COMMENT_END===",
+      "mode":  "kv",
+      "keys":  ["TARGET", "BODY"]
+    },
+    "ISSUE": {
+      "start": "===TOS_ISSUE_START===",
+      "end":   "===TOS_ISSUE_END===",
+      "mode":  "kv",
+      "keys":  ["TITLE", "BODY"]
+    }
+  }
+}

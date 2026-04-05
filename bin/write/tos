@@ -5,7 +5,8 @@ PROJECT_NAME="$1"
 ACTION="$2"
 
 case "$ACTION" in
-    "code")    "$TOS_BIN/write/code.sh" "$PROJECT_NAME" ;;
+    "code")    "$TOS_BIN/write/code.sh"    "$PROJECT_NAME" ;;
     "comment") "$TOS_BIN/write/comment.sh" "$PROJECT_NAME" ;;
-    *) echo "Usage: tos <project> write <code|comment>"; exit 1 ;;
+    "tasks")   "$TOS_BIN/write/tasks.sh"   "$PROJECT_NAME" ;;
+    *) echo "Usage: tos <project> write <code|comment|tasks>"; exit 1 ;;
 esac

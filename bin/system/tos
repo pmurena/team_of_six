@@ -1,0 +1,9 @@
+#!/bin/zsh
+[[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
+
+ACTION="$1"
+
+case "$ACTION" in
+    "export-parsers") "$TOS_BIN/system/export_parsers.sh" ;;
+    *) echo "Usage: tos system <export-parsers>"; exit 1 ;;
+esac
