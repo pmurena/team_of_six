@@ -3,6 +3,7 @@
 # Title: Sandbox Provisioner
 # Usage: tos <project> sync start
 # Clones the remote repository into sandbox/$USER/<project> (pure Git clone).
+# Acquires a Trinity 0 soft-lock after a successful clone.
 # ==============================================================================
 [[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
 
@@ -28,5 +29,11 @@ cd "$PROJECT_NAME"
 git config --local user.name "Team of Six (Ghost)"
 git config --local user.email "ghost@teamofsix.local"
 
-echo "✅ Sandbox Ready. Open Issues:"
+# Acquire Trinity 0 soft-lock now that the sandbox exists
+"$TOS_BIN/utils/lock/acquire.sh" "$PROJECT_NAME" "0" || {
+    echo "⛔ ERROR: Failed to acquire Trinity 0 soft-lock."
+    exit 1
+}
+
+echo "✅ Sandbox Ready. Trinity 0 soft-lock acquired. Open Issues:"
 gh issue list

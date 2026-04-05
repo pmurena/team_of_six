@@ -21,9 +21,11 @@ for repo in tos-trinity-test-*; do
             echo "🧹 Removing Architect local folder..."
             rm -rf "$repo"
 
-            if [ -d "$SANDBOX_ROOT/$repo" ]; then
-                echo "🧹 Removing Ghost sandbox clone..."
-                sudo rm -rf "$SANDBOX_ROOT/$repo"
+			SANDBOX_REPO="$SANDBOX_ROOT/$repo"
+
+            if [ -d "$SANDBOX_REPO" ]; then
+                echo "🧹 Removing Ghost sandbox clone @ "$SANDBOX_REPO"
+                sudo -u team_of_six rm -rf "$SANDBOX_REPO"
             fi
         else
             echo "❌ Failed to delete remote $repo. Keeping local folders for safety."

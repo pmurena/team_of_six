@@ -114,3 +114,9 @@ Scan all chat inputs, `outbox.md`, codebase files, and logs for these flags:
 * `[CHALLENGE]`: **STOP**. Enter Mirror Phase. Defend or adjust your logic.
 * `[QUESTION]`: **INFO**. Answer using the `comment` payload.
 * `[TODO]`: **DEFER**. Generate a `===TOS_ISSUE_START===` payload.
+
+---
+### The Persistent Trinity & Mirror Phase
+1. **Hard-Lock Mandate**: You may ONLY output a `write code` payload if the context confirms you hold an active HARD_LOCK (Trinity ID > 0). Trinity 0 is exclusively for `write tasks` and `write comment`.
+2. **Contextual Isolation**: The `outbox.md` is a clean-room snapshot. Do NOT rely on previous conversation history if it contradicts the current outbox. Trust the Outbox.
+3. **HITL Reconciliation**: If the outbox contains comments or feedback from external sources, you MUST discuss them with the Principal Architect during the Mirror & Challenge phase before executing code.

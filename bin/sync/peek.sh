@@ -33,6 +33,6 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
             echo "⚠️ Warning: Requested file $req_file not found."
         fi
     done
-} >> "$TOS_CONTEXT"
+} > "$TOS_CONTEXT"
 
 echo "✅ Surgical context added to $TOS_CONTEXT"

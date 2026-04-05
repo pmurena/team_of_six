@@ -129,7 +129,7 @@ show_role "$PURPLE" "GHOST" "Executing: tos sync start"
 
 show_role "$PURPLE" "GHOST" "Sandbox established. Checking global IPC ribbon state..."
 terminal_view "ls -l $TOS_IPC" "$(ls -l "$TOS_INPUT" "$TOS_CONTEXT")"
-show_role "$PURPLE" "GHOST" "Inbox and Outbox are clean. The ribbon is ready."
+show_role "$PURPLE" "GHOST" "Inbox and Outbox are clean. Trinity 0 Soft-Lock acquired. The ribbon is ready."
 end_turn
 
 # ==============================================================================
@@ -206,7 +206,7 @@ show_role "$YELLOW" "ARCHITECT" "Executing: tos sync peek utils.zsh"
 "$TOS_BIN_CMD" "$TEST_REPO" sync peek utils.zsh
 
 show_role "$CYAN" "AGENT" "My context has been updated. I can now 'see' the log() function."
-terminal_view "grep -A 5 'PEEK' outbox.md" "$(grep -A 5 "## SURGICAL CONTEXT INJECTION (PEEK)" "$TOS_CONTEXT")"
+terminal_view "cat "$TOS_CONTEXT")"
 end_turn
 
 # ==============================================================================
@@ -265,7 +265,7 @@ show_role "$YELLOW" "ARCHITECT" "Checking out Ghost PR branch and injecting revi
 git checkout tos-work-1 -q
 
 gh issue comment 1 -b "[QUESTION] Should we support negative numbers?" >/dev/null
-sed -i 's/add 5 5/add 5 5 # [FIXME] logic missing/' test_calculator.zsh
+sed -i 's/exit 1/exit 1 # [FIXME] logic missing/' test_calculator.zsh
 sed -i 's/log "Running tests..."/log "Running tests..." # [CHALLENGE] Why use native Zsh math instead of bc?/' test_calculator.zsh
 echo "# [TODO] Implement divide() later." >> README.md
 
@@ -442,10 +442,10 @@ show_role "$YELLOW" "ARCHITECT" "Formally Reviewing the Pull Request..."
 gh pr review tos-work-1 --comment -b "Excellent work. Transcript preserved. Looks good to merge."
 
 show_role "$YELLOW" "ARCHITECT" "Merging PR and syncing local branches..."
-gh pr merge tos-work-1 -m -d
-git checkout main -q
-git pull origin main -q
-git branch -D tos-work-1 -q 2>/dev/null || true
+"$TOS_BIN_CMD" "$TEST_REPO" remove 1
+
+
+
 
 show_role "$YELLOW" "ARCHITECT" "Ensuring Issue #1 is Closed..."
 gh issue close 1 -r "completed" 2>/dev/null || true

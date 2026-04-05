@@ -91,16 +91,39 @@ mkdir -p "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
 echo "[*] STEP 2: Copying Engine Files & Configuration..."
 
 if [[ -d "$SOURCE_BIN" ]]; then
-    rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/" >/dev/null
+    echo "  --- Rsync Summary ---"
+    # Runs rsync, filters out boilerplate lines, and indents the updated files
+    rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/" | \
+        grep -vE "^sending|^sent|^total|^$" | \
+        sed 's/^/    + /'
 else
     echo "❌ ERROR: Source directory '$SOURCE_BIN' not found."
     exit 1
 fi
 
 cp "$CONFIG_FILE" "${TOS_MNT_ROOT}/.local/conf/config"
-touch "${TOS_MNT_ROOT}/.local/conf/.token"
 touch "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/inbox.md"
 touch "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/outbox.md"
+
+# Secure Token Prompt (Conditional)
+TOKEN_FILE="${TOS_MNT_ROOT}/.local/conf/.token"
+
+if [[ -s "$TOKEN_FILE" ]]; then
+    echo "✅ Existing Ghost API token detected. Skipping prompt."
+else
+    echo ""
+    echo -n "🔑 Enter the API Token for the Ghost (input will be hidden): "
+    read -r -s GHOST_TOKEN
+    echo ""
+
+    if [[ -z "$GHOST_TOKEN" ]]; then
+        echo "⚠️  Warning: No token provided. You will need to populate .token manually."
+        touch "$TOKEN_FILE"
+    else
+        echo "$GHOST_TOKEN" > "$TOKEN_FILE"
+        echo "✅ Token captured and staged."
+    fi
+fi
 
 # --- 7. SECURITY PERIMETER LOCKDOWN ---
 echo "[*] STEP 3: Enforcing Security Perimeters..."
@@ -137,10 +160,6 @@ chmod 660 "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/"*.md
 # Flattened Sandbox (Air-gapped)
 chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
 chmod -R 700 "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
-
-echo ""
-echo "--- DEPLOYMENT REPORT ---"
-tree -a -L 6 -pug -I '.git' "${TOS_MNT_ROOT}"
 
 echo ""
 echo "✅ Deployment sequence complete. Sandbox secured for $HUMAN_USER."

@@ -1,38 +1,24 @@
 #!/bin/zsh
 # ==============================================================================
 # Title: The Global Gateway (Master Execution & Lifecycle Controller)
-#
-# Usage: tos <project> <sync|write|system> <action> [args...]
-#
-# Security layers enforced here:
-#   1. Group membership check (human side)
-#   2. Privilege escalation to AI_USER via sudoers
-#   3. Global lock acquisition / release (project:trinity)
-#   4. Hallucination control is delegated to write/code.sh (payload validation)
 # ==============================================================================
 
 source "$(cd "$(dirname "$0")/../conf" && pwd)/config"
 
-# --- ZSH FORCE ---
 if [ -z "$ZSH_VERSION" ]; then
     exec zsh "$0" "$@"
 fi
 
-# ==============================================================================
-# STAGE 1: THE BOUNCER (Runs as Human)
-# ==============================================================================
+# === STAGE 1: THE BOUNCER ===
 if [[ "$USER" != "$AI_USER" ]]; then
-
     if [[ -n "$SUDO_USER" || "$EUID" -eq 0 ]]; then
         echo "🚨 ERROR: Do not run this command with sudo. Run it as your normal user."
         exit 1
     fi
-
     if ! id -nG "$USER" | grep -qw "$AI_GROUP"; then
         echo -e "\n❌ \033[1;31mACCESS DENIED: You are not a member of the $AI_GROUP group.\033[0m"
         exit 1
     fi
-
     if sudo -n -u "$AI_USER" "$TOS_BIN/tos" "$@"; then
         exit $?
     else
@@ -41,9 +27,7 @@ if [[ "$USER" != "$AI_USER" ]]; then
     fi
 fi
 
-# ==============================================================================
-# STAGE 2: THE GHOST (Runs as AI_USER)
-# ==============================================================================
+# === STAGE 2: THE GHOST ===
 [[ -z "$SUDO_USER" ]] && { echo "❌ ERROR: SUDO_USER is not defined."; exit 1; }
 
 source "$TOS_BIN/utils/error_trap.sh"
@@ -57,71 +41,87 @@ shift 2
     exit 1
 }
 
-# Export active project so sub-modules can reference it without re-parsing args
 export TOS_ACTIVE_PROJECT="$PROJECT_NAME"
-
 mkdir -p "$TOS_IPC" 2>/dev/null || true
+
+export TOS_SANDBOX="$TOS_MNT_ROOT/sandbox/$SUDO_USER"
 export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
 export TOS_CONTROLLER_LOCKED="true"
-
-# === GLOBAL LIFECYCLE MANAGEMENT ===
 export TOS_PARSE_DIR="$TOS_IPC/parse_$$"
 mkdir -p "$TOS_PARSE_DIR"
 
-# Release lock and destroy temp dir on any exit
 trap '
-    "$TOS_BIN/utils/lock_manager.sh" release "$TOS_ACTIVE_PROJECT" "${TOS_ACTIVE_TRINITY:-0}" 2>/dev/null || true
     rm -rf "$TOS_PARSE_DIR"
 ' EXIT
 
 setopt pipefail
 
-# JIT token injection — exists in memory only for the duration of this script
 export GH_TOKEN="$(cat "$TOS_CONF/.token" 2>/dev/null)"
+GLOBAL_LOCKS="$TOS_MNT_ROOT/.ipc/locks"
 
-# ==============================================================================
-# POLICY ENFORCEMENT LAYER  (write commands only)
-#
-# Before dispatching any write subcommand the gateway:
-#   1. Scans the inbox for TARGET_PROJECT / TARGET_TRINITY header fields.
-#   2. Cross-references them against the active project and lock file.
-#   3. Verifies that the lock is held by the current user ($SUDO_USER).
-#
-# All three checks must pass or the gateway aborts — modules never see the
-# inbox and remain dumb executors.  sync and system bypass this layer.
-# ==============================================================================
+# --- Workspace Safety Audit ---
+# Every sandbox project must have an active lock owned by THIS Architect.
+# A project without a personal lock indicates an error or manual manipulation
+# and is treated as fatal to preserve context integrity.
+if [[ -d "$TOS_SANDBOX" ]]; then
+    for proj in "$TOS_SANDBOX"/*(/N); do
+        proj_name=$(basename "$proj")
+        PERSONAL_LOCK_FOUND=0
+        for file in "$GLOBAL_LOCKS/${proj_name}_trinity_"*.lock(N); do
+            if [[ -f "$file" ]] && grep -q "$SUDO_USER" "$file"; then
+                PERSONAL_LOCK_FOUND=1
+                break
+            fi
+        done
+        if [[ "$PERSONAL_LOCK_FOUND" -eq 0 ]]; then
+            echo "🚨 [ERROR] Unsafe Workspace Detected: Project '$proj_name' has no active lock owned by $SUDO_USER." >&2
+            echo "Action Required: Run 'tos $proj_name sync trinity 0' to re-establish the baseline soft-lock." >&2
+            exit 1
+        fi
+    done
+fi
+
+# --- Write Policy Enforcement ---
 if [[ "$MODULE" == "write" ]]; then
+    ACTION="$1"
 
-    # --- Step 1: lightweight header scan (no full parse, just awk first-pass) ---
+    ACTIVE_LOCK=$(ls "$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_"*.lock(N) 2>/dev/null | \
+        while read -r f; do grep -q "$SUDO_USER" "$f" && echo "$f"; done | head -n 1)
+
+    # Trinity 0 soft-lock blocks code writes only.
+    # Task creation and comments are permitted under soft-lock.
+    if [[ "$ACTIVE_LOCK" == *"_0.lock" && "$ACTION" == "code" ]]; then
+        echo "🚨 [ERROR] Write Denied: Trinity 0 is a read-only soft-lock. Sync to a feature Trinity to write code." >&2
+        exit 1
+    fi
+
     PAYLOAD_PROJECT=$(awk '
         /^===TOS_META_START===$/ { in_block=1; next }
         /^===TOS_META_END===$/ { in_block=0 }
-        in_block && /^TARGET_PROJECT=/ { sub(/^TARGET_PROJECT=/, ""); print; exit }
+        in_block && /^TARGET_PROJECT=/ { sub(/^TARGET_PROJECT=/, ""); sub(/\r$/, ""); print; exit }
     ' "$TOS_INPUT" 2>/dev/null)
 
     PAYLOAD_TRINITY=$(awk '
         /^===TOS_META_START===$/ { in_block=1; next }
         /^===TOS_META_END===$/ { in_block=0 }
-        in_block && /^TARGET_TRINITY=/ { sub(/^TARGET_TRINITY=/, ""); print; exit }
+        in_block && /^TARGET_TRINITY=/ { sub(/^TARGET_TRINITY=/, ""); sub(/\r$/, ""); print; exit }
     ' "$TOS_INPUT" 2>/dev/null)
 
-    # --- Step 2: hallucination check (only when fields are present in payload) ---
     if [[ -n "$PAYLOAD_PROJECT" && "$PAYLOAD_PROJECT" != "$TOS_ACTIVE_PROJECT" ]]; then
         echo "🚨 Context Hallucination Detected: Payload TARGET_PROJECT ('${PAYLOAD_PROJECT}') does not match active project ('${TOS_ACTIVE_PROJECT}')." >&2
         exit 1
     fi
 
-    # Derive active trinity from the lock file if payload declares one
     if [[ -n "$PAYLOAD_TRINITY" ]]; then
-        LOCK_FILE="$TOS_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_${PAYLOAD_TRINITY}.lock"
+        LOCK_FILE="$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_${PAYLOAD_TRINITY}.lock"
         if [[ ! -f "$LOCK_FILE" ]]; then
             echo "🚨 Context Hallucination Detected: Payload declares Trinity #${PAYLOAD_TRINITY} but no matching lock exists. Run 'sync trinity ${PAYLOAD_TRINITY}' first." >&2
             exit 1
         fi
         export TOS_ACTIVE_TRINITY="$PAYLOAD_TRINITY"
     else
-        # No TARGET_TRINITY in payload — infer from any existing lock for this project
-        EXISTING_LOCK=$(ls "$TOS_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_"*.lock 2>/dev/null | head -1)
+        EXISTING_LOCK=$(ls "$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_"*.lock(N) 2>/dev/null | \
+            while read -r f; do grep -q "$SUDO_USER" "$f" && echo "$f"; done | head -1)
         if [[ -z "$EXISTING_LOCK" ]]; then
             echo "🚨 No active lock found for project '${TOS_ACTIVE_PROJECT}'. Run 'sync trinity <ID>' before writing." >&2
             exit 1
@@ -129,23 +129,20 @@ if [[ "$MODULE" == "write" ]]; then
         export TOS_ACTIVE_TRINITY=$(basename "$EXISTING_LOCK" | sed 's/.*_trinity_//;s/\.lock//')
     fi
 
-    # --- Step 3: ownership assertion — lock must belong to this user ---
-    "$TOS_BIN/utils/lock_manager.sh" verify "$TOS_ACTIVE_PROJECT" "$TOS_ACTIVE_TRINITY" || exit 1
-
+    "$TOS_BIN/utils/lock/verify.sh" "$TOS_ACTIVE_PROJECT" "$TOS_ACTIVE_TRINITY" || exit 1
 fi
 
-# Route to the requested module
 {
     case "$MODULE" in
         "sync")   "$TOS_BIN/sync/tos"   "$PROJECT_NAME" "$@" ;;
         "write")  "$TOS_BIN/write/tos"  "$PROJECT_NAME" "$@" ;;
         "system") "$TOS_BIN/system/tos" "$@" ;;
+        "remove") "$TOS_BIN/sync/remove.sh" "$PROJECT_NAME" "$@" ;;
+        "remove") "$TOS_BIN/sync/remove.sh" "$PROJECT_NAME" "$@" ;;
         *) echo "Usage: tos <project> <sync|write|system> <action>"; exit 1 ;;
     esac
-} 2>&1 | tee -a "$TOS_CONTEXT"
+} 2>&1 | tee "$TOS_CONTEXT"
 
 EXIT_CODE=${pipestatus[1]}
-
 unset GH_TOKEN
-
 exit $EXIT_CODE

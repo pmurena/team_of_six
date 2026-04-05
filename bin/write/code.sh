@@ -106,3 +106,6 @@ echo "🏁 CODE WRITE COMPLETE"
         done
     fi
 } >> "$TOS_CONTEXT"
+
+# --- Context Note ---
+# The Outbox is ephemeral. The Architect must explicitely 'sync peek' or 'sync trinity' to refresh context after writing.
