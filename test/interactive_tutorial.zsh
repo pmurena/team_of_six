@@ -444,6 +444,11 @@ gh pr review tos-work-1 --comment -b "Excellent work. Transcript preserved. Look
 show_role "$YELLOW" "ARCHITECT" "Merging PR and syncing local branches..."
 "$TOS_BIN_CMD" "$TEST_REPO" remove 1
 
+show_role "$YELLOW" "ARCHITECT" "Cleaning up Architect local workspace..."
+git checkout main -q
+git branch -D tos-work-1 -q 2>/dev/null || true
+
+
 
 
 

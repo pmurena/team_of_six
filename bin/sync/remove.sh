@@ -28,6 +28,9 @@ gh issue comment "$TARGET_TRINITY" -b "$COMMENT" 2>/dev/null || true
 gh pr close "tos-work-$TARGET_TRINITY" -c "$COMMENT" 2>/dev/null || true
 gh issue close "$TARGET_TRINITY" -r "not planned" 2>/dev/null || true
 
+# Remote Cleanup
+git push origin --delete "tos-work-$TARGET_TRINITY" 2>/dev/null || true
+
 # Local Cleanup
 git checkout main -q
 git branch -D "tos-work-$TARGET_TRINITY" 2>/dev/null || true

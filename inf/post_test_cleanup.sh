@@ -24,7 +24,7 @@ for repo in tos-trinity-test-*; do
 			SANDBOX_REPO="$SANDBOX_ROOT/$repo"
 
             if [ -d "$SANDBOX_REPO" ]; then
-                echo "🧹 Removing Ghost sandbox clone @ "$SANDBOX_REPO"
+                echo "🧹 Removing Ghost sandbox clone @ $SANDBOX_REPO"
                 sudo -u team_of_six rm -rf "$SANDBOX_REPO"
             fi
         else
