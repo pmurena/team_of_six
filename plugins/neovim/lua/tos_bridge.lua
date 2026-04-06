@@ -2,7 +2,7 @@
 -- Team of Six - Neovim IPC Bridge
 -- Implements: async execution, dynamic parser caching, smart-yanking,
 --             intelligent buffer routing, branded context headers,
---             and the full ts.../tw... semantic keymap taxonomy.
+--             and the full 6... semantic keymap taxonomy.
 -- ==============================================================================
 
 local M = {}
@@ -88,7 +88,6 @@ local function extract_blocks(text, prefix)
     local blocks = {}
     local start_pat = "===TOS_" .. prefix .. "_START"
     local end_pat   = "===TOS_" .. prefix .. "_END==="
-    local pattern   = start_pat .. "(.-)" .. end_pat
     for block in text:gmatch(start_pat .. "(.-)" .. end_pat) do
         table.insert(blocks, start_pat .. block .. end_pat)
     end
@@ -103,20 +102,12 @@ local function smart_yank(command, callback)
     local collected = {}
 
     if command == "code" then
-        for _, b in ipairs(extract_blocks(text, "META")) do
-            table.insert(collected, b)
-        end
-        for _, b in ipairs(extract_blocks(text, "FILE")) do
-            table.insert(collected, b)
-        end
+        for _, b in ipairs(extract_blocks(text, "META")) do table.insert(collected, b) end
+        for _, b in ipairs(extract_blocks(text, "FILE")) do table.insert(collected, b) end
     elseif command == "comment" then
-        for _, b in ipairs(extract_blocks(text, "COMMENT")) do
-            table.insert(collected, b)
-        end
+        for _, b in ipairs(extract_blocks(text, "COMMENT")) do table.insert(collected, b) end
     elseif command == "tasks" then
-        for _, b in ipairs(extract_blocks(text, "ISSUE")) do
-            table.insert(collected, b)
-        end
+        for _, b in ipairs(extract_blocks(text, "ISSUE")) do table.insert(collected, b) end
     end
 
     if #collected == 0 then
@@ -381,23 +372,53 @@ local function register_keymaps()
         return { desc = desc, noremap = true, silent = true }
     end
 
-    -- Sync
-    vim.keymap.set("n", "<leader>tss", sync_start,                        opts("[TOS] Sync Start"))
-    vim.keymap.set("n", "<leader>tst", function() sync_trinity("local") end,  opts("[TOS] Sync Trinity (local)"))
-    vim.keymap.set("n", "<leader>tsT", function() sync_trinity("global") end, opts("[TOS] Sync Trinity (global)"))
-    vim.keymap.set("n", "<leader>tsp", sync_peek,                          opts("[TOS] Sync Peek"))
+    -- 1. Force Which-Key Group Registration
+    local wk_ok, wk = pcall(require, "which-key")
+    if wk_ok then
+        -- Try Which-Key v3 API (Modern)
+        local ok_v3 = pcall(wk.add, {
+            { "<leader>6", group = "Team of Six [6]", icon = "👻" },
+            { "<leader>6s", group = "Sync with 6" },
+            { "<leader>6w", group = "Write to 6" },
+        })
+        -- Fallback to Which-Key v2 API (Older)
+        if not ok_v3 then
+            pcall(wk.register, {
+                ["<leader>6"]  = { name = "+Team of Six [6]" },
+                ["<leader>6s"] = { name = "+Sync with 6" },
+                ["<leader>6w"] = { name = "+Write to 6" },
+            })
+        end
+    else
+        -- Fallback if Which-Key isn't loaded yet
+        vim.keymap.set("n", "<leader>6", "<Nop>", opts("Team of Six [6]"))
+        vim.keymap.set("n", "<leader>6s", "<Nop>", opts("[S]ync with 6"))
+        vim.keymap.set("n", "<leader>6w", "<Nop>", opts("[W]rite to 6"))
+    end
 
-    -- Write
-    vim.keymap.set("n", "<leader>twc", function() write_action("code")    end, opts("[TOS] Write Code"))
-    vim.keymap.set("n", "<leader>twm", function() write_action("comment") end, opts("[TOS] Write Comment"))
-    vim.keymap.set("n", "<leader>twt", function() write_action("tasks")   end, opts("[TOS] Write Tasks"))
+    -- 2. Sync Actions
+    vim.keymap.set("n", "<leader>6ss", sync_start,                         opts("Sync Start"))
+    vim.keymap.set("n", "<leader>6st", function() sync_trinity("local") end,  opts("Sync Trinity (local)"))
+    vim.keymap.set("n", "<leader>6sT", function() sync_trinity("global") end, opts("Sync Trinity (global)"))
+    vim.keymap.set("n", "<leader>6sp", sync_peek,                          opts("Sync Peek"))
+
+    -- 3. Write Actions
+    vim.keymap.set("n", "<leader>6wc", function() write_action("code")    end, opts("Write Code"))
+    vim.keymap.set("n", "<leader>6wm", function() write_action("comment") end, opts("Write Comment"))
+    vim.keymap.set("n", "<leader>6wt", function() write_action("tasks")   end, opts("Write Tasks"))
 end
 
 local function deregister_keymaps()
     if not keymaps_active then return end
     keymaps_active = false
-    local maps = { "<leader>tss", "<leader>tst", "<leader>tsT", "<leader>tsp",
-                   "<leader>twc", "<leader>twm", "<leader>twt" }
+
+    -- Define all keys to be wiped
+    local maps = { 
+        "<leader>6", 
+        "<leader>6s", "<leader>6ss", "<leader>6st", "<leader>6sT", "<leader>6sp",
+        "<leader>6w", "<leader>6wc", "<leader>6wm", "<leader>6wt" 
+    }
+
     for _, lhs in ipairs(maps) do
         pcall(vim.keymap.del, "n", lhs)
     end
@@ -419,9 +440,6 @@ function M.setup()
             deregister_keymaps()
         end
     end)
-
-    -- Top-level namespace hint
-    vim.keymap.set("n", "<leader>t", "", { desc = "[T]eam of Six" })
 end
 
 return M
