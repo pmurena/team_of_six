@@ -12,12 +12,6 @@ shift
 
 cd "$TOS_SANDBOX/$PROJECT_NAME" || exit 1
 
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-[[ ! "$CURRENT_BRANCH" =~ ^tos-work- ]] && {
-    echo "🚨 ERROR: Not on a tos-work branch. Run 'sync trinity <ID>' first."
-    exit 1
-}
-
 echo -e "\n---"
 echo "## SURGICAL CONTEXT INJECTION (PEEK)"
 echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"

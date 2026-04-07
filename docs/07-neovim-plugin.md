@@ -28,6 +28,8 @@ The plugin is built around three core ideas:
 
 **Intelligent Buffer Routing** — when a trinity sync completes, the plugin reads the outbox and routes the Clean Room Snapshot to the appropriate buffer. If you are syncing for your own work (`<leader>6st`), the context goes to your local LLM buffer. If you are syncing for a review or a team handoff (`<leader>6sT`), it goes to a shared global buffer. The LLM always starts its next response with a current, verified context snapshot already in its buffer.
 
+> **Note:** `write` commands (`write code`, `write comment`, `write tasks`) append raw engine output to the current buffer for visibility, but they do not regenerate the outbox context snapshot. The outbox is only refreshed by `sync trinity` and `sync peek`. Do not rely on post-write buffer output as LLM context — always run `sync trinity <N>` to get a clean snapshot before starting a new session.
+
 ---
 
 ## The Dynamic Parser Cache

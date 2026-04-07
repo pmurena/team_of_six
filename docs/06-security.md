@@ -51,7 +51,7 @@ The control plane at `/mnt/team_of_six/` is structured for multi-tenant operatio
 ```
 /mnt/team_of_six/                   owned: team_of_six:team_of_six  mode: 0750
 ├── .ipc/
-│   ├── locks/                      owned: team_of_six:team_of_six  mode: 0770
+│   ├── locks/                      owned: team_of_six:team_of_six  mode: 0700
 │   └── <architect>/                owned: team_of_six:team_of_six  mode: 3770
 │       ├── inbox.md                owned: <architect>:team_of_six  mode: 0660
 │       └── outbox.md              owned: team_of_six:team_of_six  mode: 0660
@@ -105,6 +105,7 @@ This script:
 - Creates the control plane directory structure at `/mnt/team_of_six/`
 - Copies the TOS binaries to `.local/bin/` with correct ownership and permissions
 - Verifies that all required dependencies are installed (`zsh`, `git`, `gh`, `rsync`, etc.)
+- **Automatically calls `inf/tos_add_user.sh` for the deploying user** — you do not need to run Step 3 manually for yourself, only for additional Architects
 
 **Step 2: Install the GitHub token**
 

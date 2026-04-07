@@ -112,14 +112,16 @@ if [[ "$MODULE" == "write" ]]; then
         exit 1
     fi
 
-    if [[ -n "$PAYLOAD_TRINITY" ]]; then
+    # Comment blocks target an issue/PR number directly — they carry no
+    # TARGET_TRINITY and do not require trinity-level lock validation.
+    if [[ -n "$PAYLOAD_TRINITY" && "$ACTION" != "comment" ]]; then
         LOCK_FILE="$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_${PAYLOAD_TRINITY}.lock"
         if [[ ! -f "$LOCK_FILE" ]]; then
             echo "🚨 Context Hallucination Detected: Payload declares Trinity #${PAYLOAD_TRINITY} but no matching lock exists. Run 'sync trinity ${PAYLOAD_TRINITY}' first." >&2
             exit 1
         fi
         export TOS_ACTIVE_TRINITY="$PAYLOAD_TRINITY"
-    else
+    elif [[ "$ACTION" != "comment" ]]; then
         EXISTING_LOCK=$(ls "$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_"*.lock(N) 2>/dev/null | \
             while read -r f; do grep -q "$SUDO_USER" "$f" && echo "$f"; done | head -1)
         if [[ -z "$EXISTING_LOCK" ]]; then
@@ -129,7 +131,9 @@ if [[ "$MODULE" == "write" ]]; then
         export TOS_ACTIVE_TRINITY=$(basename "$EXISTING_LOCK" | sed 's/.*_trinity_//;s/\.lock//')
     fi
 
-    "$TOS_BIN/utils/lock/verify.sh" "$TOS_ACTIVE_PROJECT" "$TOS_ACTIVE_TRINITY" || exit 1
+    if [[ "$ACTION" != "comment" ]]; then
+        "$TOS_BIN/utils/lock/verify.sh" "$TOS_ACTIVE_PROJECT" "$TOS_ACTIVE_TRINITY" || exit 1
+    fi
 fi
 
 {
