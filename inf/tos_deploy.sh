@@ -9,8 +9,14 @@ fi
 # --- 1. DEPENDENCY CHECK ---
 REQUIRED_PKGS=("zsh" "git" "rsync" "gh" "tee" "touch" "tree" "chown" "chmod" "mkdir")
 
+# [TECHNICAL DEBT]: Legacy dependencies slated for removal on the roadmap
+# Python3 is currently required by bin/system/export_parsers.sh to merge JSON.
+# Slated to be replaced by a native Neovim LSP/Lua parser implementation.
+LEGACY_PKGS=("python3")
+
 MISSING_PKGS=()
-for pkg in "${REQUIRED_PKGS[@]}"; do
+# Check both standard and legacy packages
+for pkg in "${REQUIRED_PKGS[@]}" "${LEGACY_PKGS[@]}"; do
     if ! command -v "$pkg" &> /dev/null; then
         MISSING_PKGS+=("$pkg")
     fi
