@@ -1,3 +1,7 @@
+← [README.md](../README.md) | Next: [02-architecture.md](02-architecture.md)
+
+---
+
 # LLM Pitfalls & Mitigation
 
 The Team of Six is engineered entirely around mitigating the inherent psychological and technical flaws of Large Language Models. If you do not respect these pitfalls, the engine will collapse into hallucination.
@@ -69,3 +73,8 @@ This is manageable in a single short session. Across multiple sessions, or acros
 | Proprietary Pollution / Scope Collapse | Business rules embedded in the agent prompt; tasks too broad for reliable output | Universal Agent Boundary — domain rules live in the project repo, not the agent |
 | Implicit Assumption / Context Drift | LLM eagerness to execute without verifying intent; accumulated session state | Micro-Protocol — Mirror → Challenge → Plan → Execute with mandatory human approval |
 | Unvalidated Mutations | Implicit trust in LLM output; no cross-referencing of declared vs. actual state | Gateway hallucination checks on every write — mismatched payloads are rejected |
+
+
+---
+
+← [README.md](../README.md) | Next: [02-architecture.md](02-architecture.md)

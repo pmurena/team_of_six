@@ -197,7 +197,9 @@ After `tos myproject write code`, the Architect checks out the branch, runs the 
 
 With passing tests, the LLM can safely refactor — improving code clarity, adding documentation, tightening up edge cases — without breaking functionality. The same `write code` command applies. Each refactor payload includes updated files; the Ghost commits them to the same branch.
 
-The Retrospective is a special refactor: the LLM updates its own rule files in `llm_agents/` based on what it learned during the trinity. These files are committed to the repository and become part of the context for all future sessions. The Agent's constraints evolve with the project.
+The Documentation Update is a specialized refactor where the LLM synchronizes project documentation with the insights gained during the Trinity. While any file may be modified during this phase, no new functional code is written. Instead, the LLM updates the README, /docs directory, Architecture Decision Records (ADRs), inline comments, and docstrings.
+
+In this phase, the LLM may also propose new issues or comment on existing ones to bridge the gap between Trinities. This step is crucial: it lays the foundation for future context snapshots and acts as the cement holding the project together. It is the moment where the codebase transitions from raw logic into shared knowledge for both the LLM and the human developer.
 
 ---
 
@@ -217,10 +219,12 @@ The repository now contains the merged work. Issue #1 is closed. The Ghost is ba
 
 ## The Retrospective Pattern
 
-Before closing a trinity, it is worth having the LLM review what it learned and propose updates to `llm_agents/code.md`. This file contains rules that will be included in the context snapshot for all future sessions. If the LLM discovered during this trinity that a particular pattern causes problems, or that a particular approach works well for this codebase, it can encode that knowledge in its own rule file — which the Ghost will then commit and which will persist across all future work.
+Before closing a Trinity, the LLM reviews its findings and proposes updates to the `llm_agents/` directory. This folder houses the behavioral rules governing human-LLM interactions. If a Trinity reveals a problematic pattern or a highly effective approach, the LLM encodes that knowledge into its own rule files. These updates are then submitted via PR for the Agent Maintainer to review.
 
-This is the self-improvement loop: the Agent's constraints evolve with the project, becoming increasingly calibrated to the specific patterns and requirements of the codebase over time.
+To avoid proprietary pollution of project repositories, these updates are managed within the "Team of Six" core engine. Specific agents can be defined to accommodate language-specific nuances, corporate guidelines, and other global constraints.
 
+This phase creates a self-improvement loop: the Agent’s constraints evolve, becoming increasingly calibrated for high-quality agentic coding. This is where humans and LLMs synchronize to unleash the full power of the Team of Six — where 1 becomes 6.
+ 
 ---
 
 ← [04-protocol.md](04-protocol.md) | Next: [06-security.md](06-security.md) →
