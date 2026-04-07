@@ -1,8 +1,8 @@
-← [README.md](../README.md) | Next: [02-architecture.md](02-architecture.md)
+← [README.md](../README.md) | Next: [01-theSocialContract.md](01-theSocialContract.md)
 
 ---
 
-# LLM Pitfalls & Mitigation
+# 00 - LLM Pitfalls & Mitigation
 
 The Team of Six is engineered entirely around mitigating the inherent psychological and technical flaws of Large Language Models. If you do not respect these pitfalls, the engine will collapse into hallucination.
 
