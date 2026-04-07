@@ -26,7 +26,7 @@ The plugin is built around three core ideas:
 
 **Async Execution** — when a TOS command is triggered from a keymap, the plugin runs it asynchronously via `vim.system`. Neovim remains responsive while the Ghost works. The output appears in a terminal split when the command completes.
 
-**Intelligent Buffer Routing** — when a trinity sync completes, the plugin reads the outbox and routes the Clean Room Snapshot to the appropriate buffer. If you are syncing for your own work (`<leader>tst`), the context goes to your local LLM buffer. If you are syncing for a review or a team handoff (`<leader>tsT`), it goes to a shared global buffer. The LLM always starts its next response with a current, verified context snapshot already in its buffer.
+**Intelligent Buffer Routing** — when a trinity sync completes, the plugin reads the outbox and routes the Clean Room Snapshot to the appropriate buffer. If you are syncing for your own work (`<leader>6st`), the context goes to your local LLM buffer. If you are syncing for a review or a team handoff (`<leader>6sT`), it goes to a shared global buffer. The LLM always starts its next response with a current, verified context snapshot already in its buffer.
 
 ---
 
@@ -40,30 +40,30 @@ If the parser cache fails to load (network error, the Ghost is not running), the
 
 ## The Git Guardrail
 
-All TOS keymaps are automatically activated and deactivated based on whether the current buffer is inside a Git repository. When you open a file outside a Git repo, the `<leader>tw*` and `<leader>ts*` keymaps do not exist. When you enter a Git repo (either by opening a file within one, or by changing directory), they activate automatically via a `BufEnter` / `DirChanged` autocommand. This prevents accidental TOS operations from non-project buffers and keeps the keymap namespace clean when you are not doing TOS work.
+All TOS keymaps are automatically activated and deactivated based on whether the current buffer is inside a Git repository. When you open a file outside a Git repo, the `<leader>6w*` and `<leader>6s*` keymaps do not exist. When you enter a Git repo (either by opening a file within one, or by changing directory), they activate automatically via a `BufEnter` / `DirChanged` autocommand. This prevents accidental TOS operations from non-project buffers and keeps the keymap namespace clean when you are not doing TOS work.
 
 ---
 
 ## Keymap Reference
 
-All keymaps are in the `<leader>t` namespace — displayed in which-key as "[T]eam of Six" if you use which-key.nvim.
+All keymaps are in the `<leader>6` namespace — displayed in which-key as "[T]eam of Six" if you use which-key.nvim.
 
 ### Sync Commands
 
 | Keymap | Action | Description |
 |--------|--------|-------------|
-| `<leader>tss` | Sync Start | Provisions the sandbox for the current project. Equivalent to `tos <project> sync start`. Detects the project name from `git rev-parse --show-toplevel`. |
-| `<leader>tst` | Sync Trinity (local) | Queries GitHub for open issues and PRs, presents a selection menu, syncs the chosen trinity, and routes the Clean Room Snapshot to the local LLM buffer. |
-| `<leader>tsT` | Sync Trinity (global) | Same as above but routes the context to a global shared buffer. Useful when handing off context to a colleague or a different LLM session. |
-| `<leader>tsp` | Sync Peek | Prompts for a space-separated list of filenames and injects their content into the outbox. Equivalent to `tos <project> sync peek <files>`. |
+| `<leader>6ss` | Sync Start | Provisions the sandbox for the current project. Equivalent to `tos <project> sync start`. Detects the project name from `git rev-parse --show-toplevel`. |
+| `<leader>6st` | Sync Trinity (local) | Queries GitHub for open issues and PRs, presents a selection menu, syncs the chosen trinity, and routes the Clean Room Snapshot to the local LLM buffer. |
+| `<leader>6sT` | Sync Trinity (global) | Same as above but routes the context to a global shared buffer. Useful when handing off context to a colleague or a different LLM session. |
+| `<leader>6sp` | Sync Peek | Prompts for a space-separated list of filenames and injects their content into the outbox. Equivalent to `tos <project> sync peek <files>`. |
 
 ### Write Commands
 
 | Keymap | Action | Description |
 |--------|--------|-------------|
-| `<leader>twc` | Write Code | Smart-yanks `TOS_META` and `TOS_FILE` blocks from the current buffer, writes them to the inbox, and runs `tos <project> write code`. |
-| `<leader>twm` | Write Comment | Smart-yanks `TOS_COMMENT` blocks and runs `tos <project> write comment`. |
-| `<leader>twt` | Write Tasks | Smart-yanks `TOS_ISSUE` blocks and runs `tos <project> write tasks`. |
+| `<leader>6wc` | Write Code | Smart-yanks `TOS_META` and `TOS_FILE` blocks from the current buffer, writes them to the inbox, and runs `tos <project> write code`. |
+| `<leader>6wm` | Write Comment | Smart-yanks `TOS_COMMENT` blocks and runs `tos <project> write comment`. |
+| `<leader>6wt` | Write Tasks | Smart-yanks `TOS_ISSUE` blocks and runs `tos <project> write tasks`. |
 
 ---
 
@@ -110,9 +110,9 @@ The plugin is designed to work alongside a Neovim LLM chat plugin such as `gp.nv
 3. The Clean Room Snapshot from `sync trinity` is injected into the chat buffer as the opening context for each new session
 
 With this setup, the full cycle is:
-- `<leader>tst` — sync the trinity, inject context into the chat buffer
+- `<leader>6st` — sync the trinity, inject context into the chat buffer
 - Chat with the LLM in the buffer; it produces TOS-formatted payloads
-- `<leader>twc` (or `twt` or `twm`) — smart-yank the payload, execute via Ghost, result appears in a terminal split
+- `<leader>6wc` (or `6wt` or `6wm`) — smart-yank the payload, execute via Ghost, result appears in a terminal split
 - Repeat
 
 No manual text copying at any point.
