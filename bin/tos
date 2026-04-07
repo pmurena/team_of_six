@@ -137,8 +137,7 @@ fi
         "sync")   "$TOS_BIN/sync/tos"   "$PROJECT_NAME" "$@" ;;
         "write")  "$TOS_BIN/write/tos"  "$PROJECT_NAME" "$@" ;;
         "system") "$TOS_BIN/system/tos" "$@" ;;
-        "remove") "$TOS_BIN/sync/remove.sh" "$PROJECT_NAME" "$@" ;;
-        "remove") "$TOS_BIN/sync/remove.sh" "$PROJECT_NAME" "$@" ;;
+        "remove") "$TOS_BIN/remove.sh" "$PROJECT_NAME" "$@" ;;
         *) echo "Usage: tos <project> <sync|write|system> <action>"; exit 1 ;;
     esac
 } 2>&1 | tee "$TOS_CONTEXT"
