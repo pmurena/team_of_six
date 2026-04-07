@@ -26,7 +26,7 @@ Standard debugging with an LLM looks like: run the code, see an error, paste the
 2. `tos <project> sync peek <failing-file>` injects the failing file's current content into the outbox
 3. The Architect pastes the stack trace and the peek output into the LLM buffer
 4. The LLM produces a fix payload
-5. `<leader>twc` delivers it to the Ghost, which commits the fix
+5. `<leader>6wc` delivers it to the Ghost, which commits the fix
 6. The Architect re-runs the tests
 
 Because the Ghost's commit is on the feature branch and the Clean Room Snapshot reflects the current diff, the LLM has an accurate picture of what has already been tried. It is not guessing from a chat history — it is reading a verified diff. This allows the debugging loop to run multiple iterations without the LLM losing track of which fixes have been applied and which have not.

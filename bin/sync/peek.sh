@@ -18,21 +18,17 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
     exit 1
 }
 
-{
-    echo -e "\n---"
-    echo "## SURGICAL CONTEXT INJECTION (PEEK)"
-    echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "> Note: This context is appended. Run 'sync trinity <ID>' to clean and reset."
+echo -e "\n---"
+echo "## SURGICAL CONTEXT INJECTION (PEEK)"
+echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "> Note: This context is appended. Run 'sync trinity <ID>' to clean and reset."
 
-    for req_file in "$@"; do
-        if [[ -f "$req_file" ]]; then
-            echo -e "\n### File: \`$req_file\`\n\`\`\`"
-            cat "$req_file"
-            echo "\`\`\`"
-        else
-            echo "⚠️ Warning: Requested file $req_file not found."
-        fi
-    done
-} > "$TOS_CONTEXT"
-
-echo "✅ Surgical context added to $TOS_CONTEXT"
+for req_file in "$@"; do
+	if [[ -f "$req_file" ]]; then
+		echo -e "\n### File: \`$req_file\`\n\`\`\`"
+		cat "$req_file"
+		echo "\`\`\`"
+	else
+		echo "⚠️ Warning: Requested file $req_file not found."
+	fi
+done

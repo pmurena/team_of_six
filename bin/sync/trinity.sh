@@ -69,32 +69,28 @@ else
 fi
 
 # --- Context Regeneration (Clean Room Snapshot) ---
-{
-    echo "# TRINITY CONTEXT: #${TRINITY_ID} (Branch: $BRANCH_NAME)\n"
-    echo "TARGET_PROJECT=$PROJECT_NAME"
-    echo "TARGET_TRINITY=$TRINITY_ID"
+echo "# TRINITY CONTEXT: #${TRINITY_ID} (Branch: $BRANCH_NAME)\n"
+echo "TARGET_PROJECT=$PROJECT_NAME"
+echo "TARGET_TRINITY=$TRINITY_ID"
 
-    if [[ "$TRINITY_ID" != "0" ]]; then
-        gh issue view "$TRINITY_ID" --comments 2>&1
+if [[ "$TRINITY_ID" != "0" ]]; then
+	gh issue view "$TRINITY_ID" --comments 2>&1
 
-        if gh pr view "$BRANCH_NAME" &>/dev/null; then
-            echo -e "\n## PULL REQUEST CONTEXT & COMMENTS"
-            gh pr view "$BRANCH_NAME" --comments 2>&1
-        fi
-    else
-        echo "STATE: SANCTUARY (Main Branch / Baseline)"
-        echo "WARNING: Write Code operations are strictly blocked in Trinity 0."
-    fi
+	if gh pr view "$BRANCH_NAME" &>/dev/null; then
+		echo -e "\n## PULL REQUEST CONTEXT & COMMENTS"
+		gh pr view "$BRANCH_NAME" --comments 2>&1
+	fi
+else
+	echo "STATE: SANCTUARY (Main Branch / Baseline)"
+	echo "WARNING: Write Code operations are strictly blocked in Trinity 0."
+fi
 
-    echo -e "\n## CURRENT DIFF (origin/main...HEAD)"
-    git diff origin/main...HEAD
+echo -e "\n## CURRENT DIFF (origin/main...HEAD)"
+git diff origin/main...HEAD
 
-    echo -e "\n## REPOSITORY SIGNATURE MAP"
-    if command -v ctags &>/dev/null; then
-        ctags -x -R --exclude=.git . 2>/dev/null
-    else
-        git ls-files
-    fi
-} > "$TOS_CONTEXT"
-
-echo "✅ Context staged at $TOS_CONTEXT"
+echo -e "\n## REPOSITORY SIGNATURE MAP"
+if command -v ctags &>/dev/null; then
+	ctags -x -R --exclude=.git . 2>/dev/null
+else
+	git ls-files
+fi

@@ -90,22 +90,20 @@ fi
 echo "🏁 CODE WRITE COMPLETE"
 
 # === JOURNAL: Record committed files into the outbox ===
-{
-    echo ""
-    echo "## GHOST COMMITTED: Trinity #${ACTIVE_TRINITY} — $TITLE"
-    echo "Branch: $CURRENT_BRANCH"
-    echo ""
-    if [[ ${#FILE_ITEMS[@]} -gt 0 ]]; then
-        for item_dir in "${FILE_ITEMS[@]}"; do
-            WRITTEN_PATH=$(cat "$item_dir/_TARGET.txt" 2>/dev/null)
-            echo "### \`$WRITTEN_PATH\`"
-            echo '```'
-            cat "$item_dir/RAW_BODY.txt"
-            echo '```'
-            echo ""
-        done
-    fi
-} >> "$TOS_CONTEXT"
+echo ""
+echo "## GHOST COMMITTED: Trinity #${ACTIVE_TRINITY} — $TITLE"
+echo "Branch: $CURRENT_BRANCH"
+echo ""
+if [[ ${#FILE_ITEMS[@]} -gt 0 ]]; then
+	for item_dir in "${FILE_ITEMS[@]}"; do
+		WRITTEN_PATH=$(cat "$item_dir/_TARGET.txt" 2>/dev/null)
+		echo "### \`$WRITTEN_PATH\`"
+		echo '```'
+		cat "$item_dir/RAW_BODY.txt"
+		echo '```'
+		echo ""
+	done
+fi
 
 # --- Context Note ---
 # The Outbox is ephemeral. The Architect must explicitely 'sync peek' or 'sync trinity' to refresh context after writing.

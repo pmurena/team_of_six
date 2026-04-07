@@ -33,15 +33,15 @@ for item_dir in "${ITEM_DIRS[@]}"; do
 
         if gh pr view "$TARGET" &>/dev/null; then
             if gh pr comment "$TARGET" --body-file "$BODY_FILE"; then
-                echo -e "\n## GHOST COMMENT POSTED TO PR #$TARGET:\n" >> "$TOS_CONTEXT"
-                cat "$BODY_FILE" >> "$TOS_CONTEXT"
+                echo -e "\n## GHOST COMMENT POSTED TO PR #$TARGET:\n"
+                cat "$BODY_FILE" 
             else
                 echo "❌ ERROR: Failed to post comment to PR #$TARGET."
             fi
         else
             if gh issue comment "$TARGET" --body-file "$BODY_FILE"; then
-                echo -e "\n## GHOST COMMENT POSTED TO ISSUE #$TARGET:\n" >> "$TOS_CONTEXT"
-                cat "$BODY_FILE" >> "$TOS_CONTEXT"
+                echo -e "\n## GHOST COMMENT POSTED TO ISSUE #$TARGET:\n" 
+                cat "$BODY_FILE" 
             else
                 echo "❌ ERROR: Failed to post comment to Issue #$TARGET."
             fi
