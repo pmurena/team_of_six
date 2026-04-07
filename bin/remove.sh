@@ -1,7 +1,7 @@
 #!/bin/zsh
 # ==============================================================================
 # Title: Trinity Finalizer
-# Usage: tos <project> sync remove <trinity_id>
+# Usage: tos <project> remove <trinity_id>
 #
 # Closes the GitHub issue and PR for the given trinity, cleans the local
 # branch, explicitly releases the hard-lock, then returns to Trinity 0.
