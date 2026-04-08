@@ -8,5 +8,6 @@ case "$ACTION" in
     "code")    "$TOS_BIN/write/code.sh"    "$PROJECT_NAME" ;;
     "comment") "$TOS_BIN/write/comment.sh" "$PROJECT_NAME" ;;
     "tasks")   "$TOS_BIN/write/tasks.sh"   "$PROJECT_NAME" ;;
+    "trinity")   "$TOS_BIN/write/trinity.sh"   "$PROJECT_NAME" ;;
     *) echo "Usage: tos <project> write <code|comment|tasks>"; exit 1 ;;
 esac

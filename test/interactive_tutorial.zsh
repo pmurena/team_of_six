@@ -442,7 +442,7 @@ show_role "$YELLOW" "ARCHITECT" "Formally Reviewing the Pull Request..."
 gh pr review tos-work-1 --comment -b "Excellent work. Transcript preserved. Looks good to merge."
 
 show_role "$YELLOW" "ARCHITECT" "Merging PR and syncing local branches..."
-"$TOS_BIN_CMD" "$TEST_REPO" remove 1
+"$TOS_BIN_CMD" "$TEST_REPO" write trinity
 
 show_role "$YELLOW" "ARCHITECT" "Cleaning up Architect local workspace..."
 git checkout main -q

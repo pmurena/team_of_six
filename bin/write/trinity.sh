@@ -14,17 +14,9 @@
 PROJECT=$1
 shift
 TARGET_TRINITY=$1
-shift
-CLOSE_COMMENT="$*"
 
 if [[ -z "$TARGET_TRINITY" || "$TARGET_TRINITY" == "0" ]]; then
-    echo "[ERROR] Cannot remove Trinity 0 (main)."
-    exit 1
-fi
-
-if [[ -z "$CLOSE_COMMENT" ]]; then
-    echo "[ERROR] A closing comment is required."
-    echo "Usage: tos <project> remove <trinity_id> \"<close_comment>\""
+    echo "[ERROR] Cannot finalize Trinity 0 (main)."
     exit 1
 fi
 
@@ -32,7 +24,7 @@ echo "[INFO] Initiating Traceable Finality for Trinity $TARGET_TRINITY..."
 cd "$TOS_SANDBOX/$PROJECT" || exit 1
 
 REV_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-COMMENT="Removed at revision $REV_HASH on branch tos-work-$TARGET_TRINITY. $CLOSE_COMMENT"
+COMMENT="Finalized at revision $REV_HASH on branch tos-work-$TARGET_TRINITY."
 
 # Post to GitHub Knowledge Base
 gh issue comment "$TARGET_TRINITY" -b "$COMMENT" 2>/dev/null || true
