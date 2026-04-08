@@ -14,7 +14,7 @@
 
 OUTPUT="{}"
 
-for parser_file in "$TOS_BIN"/*/".config/parsers/parsers.json"(N); do
+for parser_file in "$TOS_BIN"/**/".config/parsers/parsers.json"(N); do
     MODULE=$(basename "$(dirname "$(dirname "$parser_file")")")
     MODULE_JSON=$(cat "$parser_file" 2>/dev/null) || continue
     # Merge: wrap under module key using Python (available everywhere)

@@ -96,7 +96,7 @@ end
 
 -- For "code" command: grab META + FILE blocks.
 -- For "comment": grab COMMENT blocks.
--- For "tasks": grab ISSUE blocks.
+-- For "issue": grab ISSUE blocks.
 local function smart_yank(command, callback)
     local text = current_buffer_text()
     local collected = {}
@@ -106,7 +106,7 @@ local function smart_yank(command, callback)
         for _, b in ipairs(extract_blocks(text, "FILE")) do table.insert(collected, b) end
     elseif command == "comment" then
         for _, b in ipairs(extract_blocks(text, "COMMENT")) do table.insert(collected, b) end
-    elseif command == "tasks" then
+    elseif command == "issue" then
         for _, b in ipairs(extract_blocks(text, "ISSUE")) do table.insert(collected, b) end
     end
 
@@ -385,8 +385,8 @@ local function register_keymaps()
         if not ok_v3 then
             pcall(wk.register, {
                 ["<leader>6"]  = { name = "+Team of Six [6]" },
-                ["<leader>6s"] = { name = "+Sync with 6" },
-                ["<leader>6w"] = { name = "+Write to 6" },
+                ["<leader>6s"] = { name = "+[S]ync with 6" },
+                ["<leader>6w"] = { name = "+[W]rite to 6" },
             })
         end
     else
@@ -397,15 +397,16 @@ local function register_keymaps()
     end
 
     -- 2. Sync Actions
-    vim.keymap.set("n", "<leader>6ss", sync_start,                         opts("Sync Start"))
-    vim.keymap.set("n", "<leader>6st", function() sync_trinity("local") end,  opts("Sync Trinity (local)"))
-    vim.keymap.set("n", "<leader>6sT", function() sync_trinity("global") end, opts("Sync Trinity (global)"))
-    vim.keymap.set("n", "<leader>6sp", sync_peek,                          opts("Sync Peek"))
+    vim.keymap.set("n", "<leader>6ss", sync_start,                         opts("[S]ync Start"))
+    vim.keymap.set("n", "<leader>6st", function() sync_trinity("local") end,  opts("Sync [T]rinity (local)"))
+    vim.keymap.set("n", "<leader>6sT", function() sync_trinity("global") end, opts("Sync [T]rinity (global)"))
+    vim.keymap.set("n", "<leader>6sp", sync_peek,                          opts("Sync [P]eek"))
 
     -- 3. Write Actions
-    vim.keymap.set("n", "<leader>6wc", function() write_action("code")    end, opts("Write Code"))
+    vim.keymap.set("n", "<leader>6wc", function() write_action("code")    end, opts("Write [C]ode"))
     vim.keymap.set("n", "<leader>6wm", function() write_action("comment") end, opts("Write Comment"))
-    vim.keymap.set("n", "<leader>6wt", function() write_action("tasks")   end, opts("Write Tasks"))
+    vim.keymap.set("n", "<leader>6wi", function() write_action("issue") end, opts("Write [I]ssue"))
+    vim.keymap.set("n", "<leader>6wi", "<leader>6wt", function() write_action("trinity") end, opts("Write [T]rinity"))
 end
 
 local function deregister_keymaps()
@@ -416,7 +417,7 @@ local function deregister_keymaps()
     local maps = { 
         "<leader>6", 
         "<leader>6s", "<leader>6ss", "<leader>6st", "<leader>6sT", "<leader>6sp",
-        "<leader>6w", "<leader>6wc", "<leader>6wm", "<leader>6wt" 
+        "<leader>6w", "<leader>6wc", "<leader>6wm", "<leader>6wi", "<leader>6wt" 
     }
 
     for _, lhs in ipairs(maps) do

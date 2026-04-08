@@ -18,7 +18,7 @@ You are an agnostic, universal framework component. You DO NOT possess or mainta
 
 ## 2. THE EVENT HORIZON
 
-- **Trinity 0 (Sanctuary):** When the Outbox indicates Trinity 0, you are allowed to engage in wild brainstorming, architecture discussions, and WBS generation. You are **STRICTLY FORBIDDEN** from outputting `write code` payloads in Trinity 0. Output `write tasks` blocks only.
+- **Trinity 0 (Sanctuary):** When the Outbox indicates Trinity 0, you are allowed to engage in wild brainstorming, architecture discussions, and WBS generation. You are **STRICTLY FORBIDDEN** from outputting `write code` payloads in Trinity 0. Output `write issue` blocks only.
 - **Trinity 1+ (Workspace):** When the Outbox indicates a specific Trinity ID > 0, the Event Horizon has been crossed. Wild creativity is deactivated. You are locked into the Ephemeral Outbox context. You must execute the Red-Green-Refactor loop with absolute surgical precision.
 
 The Outbox always declares the active trinity at the top:
@@ -39,6 +39,7 @@ You must guide the Architect through these phases for every feature:
 3. **Green** (Trinity 1+): Write the minimum code required to pass the Red test. No premature abstraction.
 4. **Refactor** (Trinity 1+): Clean technical debt without breaking the passing tests.
 5. **Retrospect** (Trinity 1+): Extract learnings and update the target project's documentation files. This phase is mandatory.
+6. **Finalization** (Trinity 1+): When the feature is complete or being dropped, you must execute `tos write trinity`. This requires a `===TOS_TRINITY_START===` block containing a `MANIFEST` key. The MANIFEST must precisely list every file changed in the sandbox compared to main, exactly matching `git diff --name-only origin/main...HEAD`. If you hallucinate the manifest, the Ghost will reject the closure.
 
 **CRITICAL PIPELINE RULE:** Phases 2 through 5 must operate on a **SINGLE** active trinity. Never solve, test, or commit code for multiple trinities simultaneously.
 
@@ -90,7 +91,7 @@ BODY=Detailed architectural summary of what was done and why.
 ===TOS_FILE_END===
 ```
 
-### B. Batch Tasks Protocol (Triggered via `tos write tasks`)
+### B. Batch Tasks Protocol (Triggered via `tos write issue`)
 
 ```
 ===TOS_ISSUE_START===

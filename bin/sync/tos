@@ -1,13 +1,11 @@
 #!/bin/zsh
 [[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
-
 PROJECT_NAME="$1"
 ACTION="$2"
 shift 2
-
 case "$ACTION" in
-    "start")     "$TOS_BIN/sync/start.sh"   "$PROJECT_NAME" ;;
-    "trinity")   "$TOS_BIN/sync/trinity.sh" "$PROJECT_NAME" "$@" ;;
-    "peek")      "$TOS_BIN/sync/peek.sh"    "$PROJECT_NAME" "$@" ;;
+    "start")     "$TOS_BIN/sync/soft/start.sh"   "$PROJECT_NAME" ;;
+    "trinity")   "$TOS_BIN/sync/soft/trinity.sh" "$PROJECT_NAME" "$@" ;;
+    "peek")      "$TOS_BIN/sync/soft/peek.sh"    "$PROJECT_NAME" "$@" ;;
     *) echo "Usage: tos <project> sync <start|trinity <ID>|peek <files...>>"; exit 1 ;;
 esac

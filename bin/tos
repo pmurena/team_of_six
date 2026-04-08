@@ -1,150 +1,66 @@
 #!/bin/zsh
 # ==============================================================================
-# Title: The Global Gateway (Master Execution & Lifecycle Controller)
+# Team of Six - Global Gateway (Strict Config Edition)
 # ==============================================================================
 
-source "$(cd "$(dirname "$0")/../conf" && pwd)/config"
+# === STAGE 1: SECURITY PERIMETER ===
+[[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
 
-if [ -z "$ZSH_VERSION" ]; then
-    exec zsh "$0" "$@"
+# === STAGE 2: CONFIGURATION INJECTION ===
+TOS_GLOBAL_CONF="/mnt/team_of_six/.local/conf/config"
+if [[ -f "$TOS_GLOBAL_CONF" ]]; then
+    source "$TOS_GLOBAL_CONF"
+else
+    echo "🚨 [ERROR] Missing global configuration at $TOS_GLOBAL_CONF" >&2
+    exit 1
 fi
 
-# === STAGE 1: THE BOUNCER ===
-if [[ "$USER" != "$AI_USER" ]]; then
-    if [[ -n "$SUDO_USER" || "$EUID" -eq 0 ]]; then
-        echo "🚨 ERROR: Do not run this command with sudo. Run it as your normal user."
-        exit 1
-    fi
-    if ! id -nG "$USER" | grep -qw "$AI_GROUP"; then
-        echo -e "\n❌ \033[1;31mACCESS DENIED: You are not a member of the $AI_GROUP group.\033[0m"
-        exit 1
-    fi
-    if sudo -n -u "$AI_USER" "$TOS_BIN/tos" "$@"; then
-        exit $?
-    else
-        echo -e "\n❌ \033[1;31mACCESS DENIED: The Threshold is sealed.\033[0m"
-        exit 1
-    fi
-fi
+# Ensure critical variables populated by config
+[[ -z "$TOS_BIN" || -z "$TOS_IPC" ]] && { echo "🚨 [ERROR] Config failed to load core paths." >&2; exit 1; }
 
-# === STAGE 2: THE GHOST ===
-[[ -z "$SUDO_USER" ]] && { echo "❌ ERROR: SUDO_USER is not defined."; exit 1; }
-
-source "$TOS_BIN/utils/error_trap.sh"
-
+# === STAGE 3: ARGUMENT PARSING ===
 PROJECT_NAME="$1"
 MODULE="$2"
-shift 2
 
-[[ -z "$PROJECT_NAME" || -z "$MODULE" ]] && {
-    echo "Usage: tos <project> <sync|write|system> <action> [args...]"
-    exit 1
-}
+# Shift the project and module so $@ only contains the action and parameters
+shift 2 
 
-export TOS_ACTIVE_PROJECT="$PROJECT_NAME"
-mkdir -p "$TOS_IPC" 2>/dev/null || true
-
-export TOS_SANDBOX="$TOS_MNT_ROOT/sandbox/$SUDO_USER"
-export TOS_WORKING_DIR="$TOS_SANDBOX/$PROJECT_NAME"
-export TOS_CONTROLLER_LOCKED="true"
-export TOS_PARSE_DIR="$TOS_IPC/parse_$$"
-mkdir -p "$TOS_PARSE_DIR"
-
-trap '
-    rm -rf "$TOS_PARSE_DIR"
-' EXIT
-
-setopt pipefail
-
-export GH_TOKEN="$(cat "$TOS_CONF/.token" 2>/dev/null)"
-GLOBAL_LOCKS="$TOS_MNT_ROOT/.ipc/locks"
-
-# --- Workspace Safety Audit ---
-# Every sandbox project must have an active lock owned by THIS Architect.
-# A project without a personal lock indicates an error or manual manipulation
-# and is treated as fatal to preserve context integrity.
-if [[ -d "$TOS_SANDBOX" ]]; then
-    for proj in "$TOS_SANDBOX"/*(/N); do
-        proj_name=$(basename "$proj")
-        PERSONAL_LOCK_FOUND=0
-        for file in "$GLOBAL_LOCKS/${proj_name}_trinity_"*.lock(N); do
-            if [[ -f "$file" ]] && grep -q "$SUDO_USER" "$file"; then
-                PERSONAL_LOCK_FOUND=1
-                break
-            fi
-        done
-        if [[ "$PERSONAL_LOCK_FOUND" -eq 0 ]]; then
-            echo "🚨 [ERROR] Unsafe Workspace Detected: Project '$proj_name' has no active lock owned by $SUDO_USER." >&2
-            echo "Action Required: Run 'tos $proj_name sync trinity 0' to re-establish the baseline soft-lock." >&2
-            exit 1
-        fi
-    done
+# === STAGE 4: ENVIRONMENT & CONTEXT ===
+# Resolve active trinity for the specific project (if initialized)
+if [[ -f "$TOS_SANDBOX/$PROJECT_NAME/.tos/active_trinity" ]]; then
+    export TOS_ACTIVE_TRINITY=$(cat "$TOS_SANDBOX/$PROJECT_NAME/.tos/active_trinity")
+else
+    export TOS_ACTIVE_TRINITY="0"
 fi
 
-# --- Write Policy Enforcement ---
+# === STAGE 5: DISPATCH & LOCK ENFORCEMENT ===
+ACTION="$1"
+SUB_PATH="soft"
+
 if [[ "$MODULE" == "write" ]]; then
-    ACTION="$1"
-
-    ACTIVE_LOCK=$(ls "$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_"*.lock(N) 2>/dev/null | \
-        while read -r f; do grep -q "$SUDO_USER" "$f" && echo "$f"; done | head -n 1)
-
-    # Trinity 0 soft-lock blocks code writes only.
-    # Task creation and comments are permitted under soft-lock.
-    if [[ "$ACTIVE_LOCK" == *"_0.lock" && "$ACTION" == "code" ]]; then
-        echo "🚨 [ERROR] Write Denied: Trinity 0 is a read-only soft-lock. Sync to a feature Trinity to write code." >&2
-        exit 1
-    fi
-
-    PAYLOAD_PROJECT=$(awk '
-        /^===TOS_META_START===$/ { in_block=1; next }
-        /^===TOS_META_END===$/ { in_block=0 }
-        in_block && /^TARGET_PROJECT=/ { sub(/^TARGET_PROJECT=/, ""); sub(/\r$/, ""); print; exit }
-    ' "$TOS_INPUT" 2>/dev/null)
-
-    PAYLOAD_TRINITY=$(awk '
-        /^===TOS_META_START===$/ { in_block=1; next }
-        /^===TOS_META_END===$/ { in_block=0 }
-        in_block && /^TARGET_TRINITY=/ { sub(/^TARGET_TRINITY=/, ""); sub(/\r$/, ""); print; exit }
-    ' "$TOS_INPUT" 2>/dev/null)
-
-    if [[ -n "$PAYLOAD_PROJECT" && "$PAYLOAD_PROJECT" != "$TOS_ACTIVE_PROJECT" ]]; then
-        echo "🚨 Context Hallucination Detected: Payload TARGET_PROJECT ('${PAYLOAD_PROJECT}') does not match active project ('${TOS_ACTIVE_PROJECT}')." >&2
-        exit 1
-    fi
-
-    # Comment blocks target an issue/PR number directly — they carry no
-    # TARGET_TRINITY and do not require trinity-level lock validation.
-    if [[ -n "$PAYLOAD_TRINITY" && "$ACTION" != "comment" ]]; then
-        LOCK_FILE="$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_${PAYLOAD_TRINITY}.lock"
-        if [[ ! -f "$LOCK_FILE" ]]; then
-            echo "🚨 Context Hallucination Detected: Payload declares Trinity #${PAYLOAD_TRINITY} but no matching lock exists. Run 'sync trinity ${PAYLOAD_TRINITY}' first." >&2
-            exit 1
-        fi
-        export TOS_ACTIVE_TRINITY="$PAYLOAD_TRINITY"
-    elif [[ "$ACTION" != "comment" ]]; then
-        EXISTING_LOCK=$(ls "$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_"*.lock(N) 2>/dev/null | \
-            while read -r f; do grep -q "$SUDO_USER" "$f" && echo "$f"; done | head -1)
-        if [[ -z "$EXISTING_LOCK" ]]; then
-            echo "🚨 No active lock found for project '${TOS_ACTIVE_PROJECT}'. Run 'sync trinity <ID>' before writing." >&2
-            exit 1
-        fi
-        export TOS_ACTIVE_TRINITY=$(basename "$EXISTING_LOCK" | sed 's/.*_trinity_//;s/\.lock//')
-    fi
-
-    if [[ "$ACTION" != "comment" ]]; then
-        "$TOS_BIN/utils/lock/verify.sh" "$TOS_ACTIVE_PROJECT" "$TOS_ACTIVE_TRINITY" || exit 1
-    fi
+    case "$ACTION" in
+        code|trinity) SUB_PATH="hard" ;;
+        issue|comment) SUB_PATH="soft" ;;
+    esac
+elif [[ "$MODULE" == "sync" ]]; then
+    SUB_PATH="soft"
 fi
 
-{
-    case "$MODULE" in
-        "sync")   "$TOS_BIN/sync/tos"   "$PROJECT_NAME" "$@" ;;
-        "write")  "$TOS_BIN/write/tos"  "$PROJECT_NAME" "$@" ;;
-        "system") "$TOS_BIN/system/tos" "$@" ;;
-        *) echo "Usage: tos <project> <sync|write|system> <action>"; exit 1 ;;
-    esac
-} 2>&1 | tee "$TOS_CONTEXT"
+if [[ "$SUB_PATH" == "hard" && "$TOS_ACTIVE_TRINITY" == "0" ]]; then
+    echo "🚨 [ERROR] Write Denied: This operation requires a Hard Lock." >&2
+    exit 1
+fi
 
-EXIT_CODE=${pipestatus[1]}
-unset GH_TOKEN
-exit $EXIT_CODE
+case "$MODULE" in
+    "sync")   TARGET_SCRIPT="$TOS_BIN/sync/tos" ;;
+    "write")  TARGET_SCRIPT="$TOS_BIN/write/tos" ;;
+    "system") TARGET_SCRIPT="$TOS_BIN/system/tos" ;;
+    *) echo "Usage: tos <project> <sync|write|system> <action>"; exit 1 ;;
+esac
+
+# === STAGE 6: EXECUTION ===
+# Ensure the central IPC directory exists for this user before teeing to it
+mkdir -p "$TOS_IPC" 2>/dev/null
+
+# Execute target script and tee output to the central Outbox defined by the config
+{ "$TARGET_SCRIPT" "$PROJECT_NAME" "$@" } 2>&1 | tee "$TOS_CONTEXT"
