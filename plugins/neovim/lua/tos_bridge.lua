@@ -31,7 +31,7 @@ local function ipc_path(filename)
 end
 
 local function tos_bin()
-    return string.format("%s/.local/bin/tos", get_mnt_root())
+    return string.format("%s/.local/bin/tos.zsh", get_mnt_root())
 end
 
 -- Check we are inside a Git repository. Used by the Git Guardrail autocmds.
