@@ -1,7 +1,7 @@
 #!/bin/zsh
 # ==============================================================================
 # Title: Lock Release
-# Usage: release.sh <project>
+# Usage: release.zsh <project>
 #
 # Releases all locks owned by this Architect for the given project.
 # ==============================================================================

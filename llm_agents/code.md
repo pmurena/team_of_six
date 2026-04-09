@@ -95,7 +95,7 @@ BODY=Detailed architectural summary of what was done and why.
 
 ```
 ===TOS_ISSUE_START===
-TITLE=Test suite for error_trap.sh
+TITLE=Test suite for error_trap.zsh
 BODY=Write a comprehensive suite verifying stack trace outputs.
 ===TOS_ISSUE_END===
 ```

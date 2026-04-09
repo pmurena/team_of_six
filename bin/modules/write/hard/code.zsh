@@ -28,7 +28,7 @@ META_DIR="$TOS_PARSE_DIR/meta"
 FILE_DIR="$TOS_PARSE_DIR/files"
 
 echo "⚡ STAGE 1: PARSING METADATA"
-"$TOS_BIN/utils/parse_blocks.sh" "$TOS_INPUT" "META" "$META_DIR" "TARGET_PROJECT" "TARGET_TRINITY" "TITLE" "BODY"
+"$TOS_BIN/utils/parse_blocks.zsh" "$TOS_INPUT" "META" "$META_DIR" "TARGET_PROJECT" "TARGET_TRINITY" "TITLE" "BODY"
 
 META_ITEMS=("$META_DIR"/*(/N))
 if [[ ${#META_ITEMS[@]} -eq 0 ]]; then
@@ -44,7 +44,7 @@ BODY=$(cat "${META_ITEMS[1]}/BODY.txt" 2>/dev/null)
 [[ -z "$TITLE" ]] && { echo "🚨 ERROR: Missing TITLE in metadata."; exit 1; }
 
 echo "⚡ STAGE 2: PARSING FILES"
-"$TOS_BIN/utils/parse_blocks.sh" "$TOS_INPUT" "FILE" "$FILE_DIR"
+"$TOS_BIN/utils/parse_blocks.zsh" "$TOS_INPUT" "FILE" "$FILE_DIR"
 
 # Inbox fully parsed — consume before side effects
 truncate -s 0 "$TOS_INPUT"

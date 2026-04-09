@@ -55,7 +55,7 @@ The fundamental unit of work is the **Trinity**: one GitHub issue, one branch, o
 
 ## Installation
 
-See [06-security.md](docs/06-security.md) for full deployment instructions including the `inf/tos_deploy.sh` script, user provisioning, and sudoers configuration.
+See [06-security.md](docs/06-security.md) for full deployment instructions including the `inf/tos_deploy.zsh` script, user provisioning, and sudoers configuration.
 
 ---
 
@@ -70,8 +70,8 @@ team_of_six/
 │   ├── system/           # Meta-operations
 │   └── utils/
 │       ├── lock/         # Atomic lock management scripts
-│       ├── error_trap.sh
-│       └── parse_blocks.sh
+│       ├── error_trap.zsh
+│       └── parse_blocks.zsh
 ├── conf/
 │   └── config            # Global configuration (paths, users, groups)
 ├── docs/                 # This documentation

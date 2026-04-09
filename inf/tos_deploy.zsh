@@ -10,7 +10,7 @@ fi
 REQUIRED_PKGS=("zsh" "git" "rsync" "gh" "tee" "touch" "tree" "chown" "chmod" "mkdir")
 
 # [TECHNICAL DEBT]: Legacy dependencies slated for removal on the roadmap
-# Python3 is currently required by bin/system/export_parsers.sh to merge JSON.
+# Python3 is currently required by bin/system/export_parsers.zsh to merge JSON.
 # Slated to be replaced by a native Neovim LSP/Lua parser implementation.
 LEGACY_PKGS=("python3")
 
@@ -44,7 +44,7 @@ if [[ "$REPO_URL" != *"team_of_six"* ]]; then
     exit 1
 fi
 
-if [[ ! -f "inf/tos_deploy.sh" ]]; then
+if [[ ! -f "inf/tos_deploy.zsh" ]]; then
     echo "❌ ERROR: Project signature not found."
     exit 1
 fi
@@ -173,4 +173,4 @@ echo "✅ Deployment sequence complete. Sandbox secured for $HUMAN_USER."
 echo ""
 echo "[*] STEP 4: Auto-Provisioning User Environment..."
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-zsh "$SCRIPT_DIR/tos_add_user.sh" "$HUMAN_USER"
+zsh "$SCRIPT_DIR/tos_add_user.zsh" "$HUMAN_USER"

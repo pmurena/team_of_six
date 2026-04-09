@@ -32,7 +32,7 @@ sudo -n -u team_of_six "$TOS_BIN/tos" "$@"
 
 The `-n` flag means non-interactive: if the sudo call requires a password, it fails immediately rather than prompting. This is intentional. TOS operations should never require manual password entry — the permission is granted unconditionally to members of the `team_of_six` group via the sudoers configuration, or not at all.
 
-The sudoers entry, installed by `inf/tos_add_user.sh`, takes the form:
+The sudoers entry, installed by `inf/tos_add_user.zsh`, takes the form:
 
 ```
 %team_of_six ALL=(team_of_six) NOPASSWD: /mnt/team_of_six/.local/bin/tos
@@ -96,7 +96,7 @@ There is no mechanism preventing two Architects from working on the same trinity
 **Step 1: Run the deployment script as root**
 
 ```zsh
-sudo ./inf/tos_deploy.sh
+sudo ./inf/tos_deploy.zsh
 ```
 
 This script:
@@ -105,7 +105,7 @@ This script:
 - Creates the control plane directory structure at `/mnt/team_of_six/`
 - Copies the TOS binaries to `.local/bin/` with correct ownership and permissions
 - Verifies that all required dependencies are installed (`zsh`, `git`, `gh`, `rsync`, etc.)
-- **Automatically calls `inf/tos_add_user.sh` for the deploying user** — you do not need to run Step 3 manually for yourself, only for additional Architects
+- **Automatically calls `inf/tos_add_user.zsh` for the deploying user** — you do not need to run Step 3 manually for yourself, only for additional Architects
 
 **Step 2: Install the GitHub token**
 
@@ -125,7 +125,7 @@ sudo -u team_of_six gh auth status --token "$(sudo cat /mnt/team_of_six/.local/c
 For each developer who will use TOS:
 
 ```zsh
-sudo ./inf/tos_add_user.sh <username>
+sudo ./inf/tos_add_user.zsh <username>
 ```
 
 This adds the user to the `team_of_six` group, provisions their IPC ribbon under `.ipc/<username>/`, creates their sandbox directory under `sandbox/<username>/`, and installs the sudoers entry.
@@ -146,10 +146,10 @@ If the gateway runs and shows the usage message, the installation is working.
 
 ## After Development: Cleanup
 
-After a tutorial run or test session, the Ghost's sandbox may contain test repositories that should be removed. The `inf/post_test_cleanup.sh` script handles this:
+After a tutorial run or test session, the Ghost's sandbox may contain test repositories that should be removed. The `inf/post_test_cleanup.zsh` script handles this:
 
 ```zsh
-sudo ./inf/post_test_cleanup.sh
+sudo ./inf/post_test_cleanup.zsh
 ```
 
 This removes test sandbox directories and deletes any lock files left by the session. It does not remove Architect provisioning or the token — those are persistent.

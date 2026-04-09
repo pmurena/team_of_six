@@ -12,7 +12,7 @@ fi
 # --- Configuration & Validation ---
 source "$(cd "$(dirname "$0")/../conf" && pwd)/config"
 TEST_REPO="tos-trinity-test-$(date +%s)"
-TOS_BIN_CMD="$TOS_MNT_ROOT/.local/bin/tos"
+TOS_BIN_CMD="$TOS_MNT_ROOT/.local/bin/tos.zsh"
 
 # Tutorial runs as the Architect ($USER), so we map IPC paths directly.
 export TOS_IPC="$TOS_MNT_ROOT/.ipc/$USER"
@@ -100,7 +100,6 @@ mkdir -p "$TEST_REPO" && cd "$TEST_REPO"
 git init -q
 echo "# TOS Tutorial" > README.md
 echo "log() { echo \"[LOG] \$1\"; }" > utils.zsh
-mkdir llm_agents && echo "Rule 1: Use native Zsh math." > llm_agents/code.md
 git add . && git commit -m "Initial commit" -q
 git branch -M main
 
@@ -140,7 +139,7 @@ CH2=$(cat << 'EOF'
 
 Goal: Break features into atomic issues to prevent LLM cognitive collapse.
 Role: Team_of_Six (Agent / Doer)
-Command: tos write tasks
+Command: tos write issue
 EOF
 )
 present_chapter "$CH2"
@@ -162,8 +161,8 @@ echo "$PAYLOAD" > "$TOS_INPUT"
 show_role "$YELLOW" "ARCHITECT" "Reviewing scoping payload in Inbox..."
 terminal_view "cat inbox.md" "$PAYLOAD"
 
-show_role "$PURPLE" "GHOST" "Executing: tos write tasks"
-"$TOS_BIN_CMD" "$TEST_REPO" write tasks
+show_role "$PURPLE" "GHOST" "Executing: tos write issue"
+"$TOS_BIN_CMD" "$TEST_REPO" write issue
 
 show_role "$YELLOW" "ARCHITECT" "Verifying Remote Truth via GitHub CLI..."
 terminal_view "gh issue list" "$(gh issue list)"
@@ -206,7 +205,7 @@ show_role "$YELLOW" "ARCHITECT" "Executing: tos sync peek utils.zsh"
 "$TOS_BIN_CMD" "$TEST_REPO" sync peek utils.zsh
 
 show_role "$CYAN" "AGENT" "My context has been updated. I can now 'see' the log() function."
-terminal_view "cat "$TOS_CONTEXT")"
+terminal_view "cat outbox.md" "$(cat "$TOS_CONTEXT")"
 end_turn
 
 # ==============================================================================
@@ -262,7 +261,9 @@ EOF
 present_chapter "$CH6"
 
 show_role "$YELLOW" "ARCHITECT" "Checking out Ghost PR branch and injecting review tags..."
-git checkout tos-work-1 -q
+# Ensure local refs are fresh and force-reset to the remote commit
+git fetch origin -q
+git checkout -B tos-work-1 origin/tos-work-1 -q
 
 gh issue comment 1 -b "[QUESTION] Should we support negative numbers?" >/dev/null
 sed -i 's/exit 1/exit 1 # [FIXME] logic missing/' test_calculator.zsh
@@ -305,7 +306,7 @@ BODY=Deferred from PR #1 feedback.
 EOF
 )
 echo "$PAYLOAD_ISSUE" > "$TOS_INPUT"
-"$TOS_BIN_CMD" "$TEST_REPO" write tasks
+"$TOS_BIN_CMD" "$TEST_REPO" write issue
 end_turn
 
 # ==============================================================================
@@ -448,10 +449,6 @@ show_role "$YELLOW" "ARCHITECT" "Cleaning up Architect local workspace..."
 git checkout main -q
 git branch -D tos-work-1 -q 2>/dev/null || true
 
-
-
-
-
 show_role "$YELLOW" "ARCHITECT" "Ensuring Issue #1 is Closed..."
 gh issue close 1 -r "completed" 2>/dev/null || true
 terminal_view "Issue #1 Status" "$(gh issue view 1 | grep -i state)"
@@ -459,5 +456,5 @@ terminal_view "Issue #1 Status" "$(gh issue view 1 | grep -i state)"
 show_role "$PURPLE" "GHOST" "Session closed. The Trinity is complete."
 terminal_view "ls -R" "$(ls -R)"
 
-echo -e "\n${YELLOW}ℹ️  NOTE: To fully clean the Ghost's secured sandbox, run \`sudo ./inf/post_test_cleanup.sh\` after exiting.${NC}\n"
+echo -e "\n${YELLOW}ℹ️  NOTE: To fully clean the Ghost's secured sandbox, run \`sudo ./inf/post_test_cleanup.zsh\` after exiting.${NC}\n"
 end_turn

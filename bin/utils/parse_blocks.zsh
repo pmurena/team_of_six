@@ -7,10 +7,10 @@
 # numbered directories (objects) containing safe, isolated text files for each 
 # expected key. 
 #
-# Key-Value Mode (e.g., parse_blocks.sh inbox ISSUE ./out TITLE BODY): 
+# Key-Value Mode (e.g., parse_blocks.zsh inbox ISSUE ./out TITLE BODY): 
 # Extracts specific fields into separate files.
 # 
-# Raw File Mode (e.g., parse_blocks.sh inbox FILE ./out): 
+# Raw File Mode (e.g., parse_blocks.zsh inbox FILE ./out): 
 # Treats the entire block as raw text, extracting the target path into 
 # `_TARGET.txt` and the content into `RAW_BODY.txt`.
 # ==============================================================================
@@ -23,7 +23,7 @@ EXPECTED_KEYS=("$@")
 
 
 if [[ -z "$INPUT_FILE" || -z "$PREFIX" || -z "$OUT_DIR" ]]; then
-    echo "🚨 ERROR: Invalid arguments to parse_blocks.sh" >&2
+    echo "🚨 ERROR: Invalid arguments to parse_blocks.zsh" >&2
     exit 1
 fi
 

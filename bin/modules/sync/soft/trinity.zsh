@@ -44,7 +44,7 @@ for file in "$GLOBAL_LOCKS/${PROJECT_NAME}_trinity_"*.lock(N); do
 done
 
 # --- Lock Acquisition ---
-"$TOS_BIN/utils/lock/acquire.sh" "$PROJECT_NAME" "$TRINITY_ID" || exit 1
+"$TOS_BIN/utils/lock/acquire.zsh" "$PROJECT_NAME" "$TRINITY_ID" || exit 1
 
 cd "$TOS_SANDBOX/$PROJECT_NAME" || exit 1
 

@@ -11,7 +11,7 @@ umask 077
 
 echo "⚡ PARSING BATCH COMMENTS"
 
-"$TOS_BIN/utils/parse_blocks.sh" "$TOS_INPUT" "COMMENT" "$TOS_PARSE_DIR" "TARGET" "BODY"
+"$TOS_BIN/utils/parse_blocks.zsh" "$TOS_INPUT" "COMMENT" "$TOS_PARSE_DIR" "TARGET" "BODY"
 
 ITEM_DIRS=("$TOS_PARSE_DIR"/*(/N))
 if [[ ${#ITEM_DIRS[@]} -eq 0 ]]; then

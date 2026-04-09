@@ -1,8 +1,9 @@
 #!/bin/zsh
+
 # ==============================================================================
 # Title: Multi-Tenant User Provisioner
 #
-# Usage: sudo ./inf/tos_add_user.sh <username>
+# Usage: sudo ./inf/tos_add_user.zsh <username>
 #
 # Adds a new Architect to the AI group, provisions their IPC ribbon in the
 # global control plane (.ipc/<user>/), creates their flattened sandbox
@@ -12,7 +13,7 @@
 TARGET_USER=$1
 
 if [[ -z "$TARGET_USER" ]]; then
-    echo "Usage: sudo ./inf/tos_add_user.sh <username>"
+    echo "Usage: sudo ./inf/tos_add_user.zsh <username>"
     exit 1
 fi
 
@@ -53,7 +54,7 @@ chmod 700 "$TARGET_SANDBOX"
 # 4. Secure Sudoers (group-wide — only needs to happen once)
 SUDO_TMP=$(mktemp)
 SUDO_FINAL="/etc/sudoers.d/team_of_six_sandbox"
-echo "%${AI_GROUP} ALL=(${AI_USER}) NOPASSWD: ${TOS_BIN}/tos" > "$SUDO_TMP"
+echo "%${AI_GROUP} ALL=(${AI_USER}) NOPASSWD: ${TOS_BIN}/tos.zsh" > "$SUDO_TMP"
 
 if visudo -c -f "$SUDO_TMP" > /dev/null; then
     cp "$SUDO_TMP" "$SUDO_FINAL"

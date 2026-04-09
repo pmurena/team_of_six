@@ -8,7 +8,7 @@
 cd "$TOS_SANDBOX/$TOS_ACTIVE_PROJECT" || exit 1
 
 PARSE_DIR="$TOS_PARSE_DIR/trinity"
-"$TOS_BIN/utils/parse_blocks.sh" "$TOS_INPUT" "TRINITY" "$PARSE_DIR" "TARGET_PROJECT" "TARGET_TRINITY" "MANIFEST"
+"$TOS_BIN/utils/parse_blocks.zsh" "$TOS_INPUT" "TRINITY" "$PARSE_DIR" "TARGET_PROJECT" "TARGET_TRINITY" "MANIFEST"
 
 PAYLOAD_TRINITY=$(cat "$PARSE_DIR/1/TARGET_TRINITY.txt" 2>/dev/null)
 [[ "$PAYLOAD_TRINITY" != "$TOS_ACTIVE_TRINITY" ]] && { echo "🚨 Hallucination: Trinity ID mismatch."; exit 1; }
@@ -38,6 +38,6 @@ gh issue close "$TOS_ACTIVE_TRINITY" -r "completed" 2>/dev/null || true
 git push origin --delete "tos-work-$TOS_ACTIVE_TRINITY" 2>/dev/null || true
 git checkout main -q && git branch -D "tos-work-$TOS_ACTIVE_TRINITY" -q 2>/dev/null || true
 
-"$TOS_BIN/utils/lock/release.sh" "$TOS_ACTIVE_PROJECT"
-"$TOS_BIN/sync/soft/trinity.sh" "$TOS_ACTIVE_PROJECT" "0"
+"$TOS_BIN/utils/lock/release.zsh" "$TOS_ACTIVE_PROJECT"
+"$TOS_BIN/sync/soft/trinity.zsh" "$TOS_ACTIVE_PROJECT" "0"
 echo "🏁 Trinity Turn Finalized."

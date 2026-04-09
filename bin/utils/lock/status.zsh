@@ -1,7 +1,7 @@
 #!/bin/zsh
 # ==============================================================================
 # Title: Lock Status
-# Usage: status.sh <project>
+# Usage: status.zsh <project>
 #
 # Prints all active locks for the given project across all Architects.
 # ==============================================================================

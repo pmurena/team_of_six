@@ -14,8 +14,8 @@ The tutorial at `test/interactive_tutorial.zsh` walks through the same lifecycle
 
 TOS operates on the assumption that:
 
-- You have run `inf/tos_deploy.sh` as root on the machine where the Ghost will operate. This creates the `team_of_six` system user, provisions the control plane at `/mnt/team_of_six/`, installs the TOS binaries, and writes the sudoers entry that allows group members to escalate to the Ghost without a password.
-- Your user account has been added to the `team_of_six` group via `inf/tos_add_user.sh`. You will need to log out and back in for the group membership to take effect.
+- You have run `inf/tos_deploy.zsh` as root on the machine where the Ghost will operate. This creates the `team_of_six` system user, provisions the control plane at `/mnt/team_of_six/`, installs the TOS binaries, and writes the sudoers entry that allows group members to escalate to the Ghost without a password.
+- Your user account has been added to the `team_of_six` group via `inf/tos_add_user.zsh`. You will need to log out and back in for the group membership to take effect.
 - A GitHub personal access token (or GitHub App token) with repository and issue permissions has been placed at `/mnt/team_of_six/.local/conf/.token`.
 - The `gh` CLI tool is installed and you have confirmed it can authenticate with the token.
 

@@ -1,7 +1,7 @@
 #!/bin/zsh
 # ==============================================================================
 # Title: Lock Verify
-# Usage: verify.sh <project> <trinity_id>
+# Usage: verify.zsh <project> <trinity_id>
 #
 # Exits 0 if this Architect owns the lock for the given project and trinity.
 # Exits 1 otherwise.

@@ -46,7 +46,7 @@ Locks are acquired by any command that puts the Architect into a working context
 
 **`tos <project> sync trinity <N>`** — transitions to a specific trinity. If N is 0, acquires a soft lock. If N is greater than 0, acquires a hard lock. Before acquiring the new lock, this command checks whether the Architect currently holds a hard lock on this project. If they do, and they are transitioning to a different trinity, it first pushes the current branch to remote — ensuring no work is lost — before releasing the old lock and writing the new one.
 
-The lock acquisition logic in `bin/utils/lock/acquire.sh` is atomic in the sense that it clears the Architect's old lock before writing the new one. There is a narrow race condition between checking for an existing hard lock held by another Architect and writing the new one — this is acknowledged and documented but not mechanically closed, as the practical risk on a single-machine multi-user setup is negligible.
+The lock acquisition logic in `bin/utils/lock/acquire.zsh` is atomic in the sense that it clears the Architect's old lock before writing the new one. There is a narrow race condition between checking for an existing hard lock held by another Architect and writing the new one — this is acknowledged and documented but not mechanically closed, as the practical risk on a single-machine multi-user setup is negligible.
 
 ---
 
@@ -97,7 +97,7 @@ The hallucination checks run for all write operations regardless of lock type. T
 
 ## Releasing Locks
 
-Locks are released explicitly by `tos <project> remove <N>`, which finalises a trinity (closes the issue and PR, deletes the local branch) and returns to Trinity 0. The release happens in two steps: first an explicit call to `release.sh` clears the hard lock, then `sync trinity 0` acquires the soft lock. This two-step approach means that if the trinity-0 acquisition fails (a network error fetching the Clean Room Snapshot from GitHub, for example), the hard lock has already been released. The system may be left without a lock momentarily, but it will not be left with a stale hard lock blocking another Architect.
+Locks are released explicitly by `tos <project> remove <N>`, which finalises a trinity (closes the issue and PR, deletes the local branch) and returns to Trinity 0. The release happens in two steps: first an explicit call to `release.zsh` clears the hard lock, then `sync trinity 0` acquires the soft lock. This two-step approach means that if the trinity-0 acquisition fails (a network error fetching the Clean Room Snapshot from GitHub, for example), the hard lock has already been released. The system may be left without a lock momentarily, but it will not be left with a stale hard lock blocking another Architect.
 
 ---
 

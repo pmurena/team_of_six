@@ -12,7 +12,7 @@ umask 077
 
 echo "⚡ PARSING BATCH ISSUES"
 
-"$TOS_BIN/utils/parse_blocks.sh" "$TOS_INPUT" "ISSUE" "$TOS_PARSE_DIR" "TITLE" "BODY"
+"$TOS_BIN/utils/parse_blocks.zsh" "$TOS_INPUT" "ISSUE" "$TOS_PARSE_DIR" "TITLE" "BODY"
 
 ITEM_DIRS=("$TOS_PARSE_DIR"/*(/N))
 if [[ ${#ITEM_DIRS[@]} -eq 0 ]]; then

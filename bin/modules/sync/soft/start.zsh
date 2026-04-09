@@ -30,7 +30,7 @@ git config --local user.name "Team of Six (Ghost)"
 git config --local user.email "ghost@teamofsix.local"
 
 # Acquire Trinity 0 soft-lock now that the sandbox exists
-"$TOS_BIN/utils/lock/acquire.sh" "$PROJECT_NAME" "0" || {
+"$TOS_BIN/utils/lock/acquire.zsh" "$PROJECT_NAME" "0" || {
     echo "⛔ ERROR: Failed to acquire Trinity 0 soft-lock."
     exit 1
 }
