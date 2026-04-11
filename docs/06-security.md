@@ -4,57 +4,55 @@
 
 # 06 — Security and Deployment
 
-This document covers the trust model underlying TOS, the mechanisms that enforce it, and the steps required to deploy a working TOS installation. It also documents the multi-tenant design for teams where multiple Architects share the same machine.
+This document covers the trust model underlying TOS, the mechanisms that enforce it, the recovery doctrines that govern failure, and the steps required to deploy a working TOS installation.
 
 ---
 
 ## The Trust Model
 
-TOS operates on a principle of layered, explicit trust. No component trusts any other component unconditionally. The layers are:
+TOS operates on a principle of layered, explicit trust. No component trusts any other component unconditionally.
 
-**The Architect is trusted to initiate commands** but not to execute them directly. When an Architect runs `tos`, they are requesting that the Gateway perform an operation on their behalf. The Gateway decides whether to honour that request.
+**The Architect is trusted to initiate commands** but not to execute them directly. The Architect triggers the Gateway. The Gateway decides whether to honour the request.
 
-**The Gateway is trusted to enforce policy** but not to originate operations. The Gateway validates, dispatches, and audits. It does not produce payloads or make decisions about what should be done — only whether a requested operation is permitted.
+**The Gateway is trusted to enforce policy** but not to originate operations. The Gateway validates, dispatches, and audits. It enforces lock tiers, manifest visas, hallucination checks, the Inbox Truncation Invariant, and destructive gates.
 
-**The Ghost is trusted to execute validated operations** but not to receive unmediated input from the LLM. The Ghost executes payloads that have passed gateway validation. It never receives raw LLM output directly.
+**The Ghost is trusted to execute validated operations** but not to receive unmediated input from the LLM. The Ghost executes payloads that have passed every gateway check.
 
-**The LLM is not trusted.** Its output is treated as untrusted input to be validated before execution. This is not a statement about the capability of the LLM — it is an acknowledgement that the LLM has no grounding in the actual system state and may produce output that is confidently wrong. Every payload is checked against ground truth before it causes any change.
+**The LLM is not trusted.** Its output is treated as hostile input. Every payload is checked against ground truth, active locks, and manifest visas before any change occurs. This is not a statement about the LLM's capability — it is an acknowledgement that the LLM has no grounding in the actual system state and may produce output that is confidently wrong.
 
 ---
 
 ## The Sudo Gateway
 
-The mechanism that enforces the separation between Architect and Ghost is `sudo`. The `tos` binary runs as the Architect's user. When it reaches Stage 1 of the gateway and determines that the user is not `team_of_six`, it re-executes itself via:
+The privilege separation between Architect and Ghost is enforced by `sudo`. The `tos` binary runs as the Architect's user. When it determines the user is not `team_of_six`, it re-executes itself via:
 
 ```zsh
-sudo -n -u team_of_six "$TOS_BIN/tos" "$@"
+sudo -n -u team_of_six "$TOS_BIN/tos.zsh" "$@"
 ```
 
-The `-n` flag means non-interactive: if the sudo call requires a password, it fails immediately rather than prompting. This is intentional. TOS operations should never require manual password entry — the permission is granted unconditionally to members of the `team_of_six` group via the sudoers configuration, or not at all.
-
-The sudoers entry, installed by `inf/tos_add_user.zsh`, takes the form:
+The `-n` flag means non-interactive — if the sudo call requires a password, it fails immediately. TOS operations never require manual password entry. The permission is granted unconditionally to `team_of_six` group members via the sudoers entry installed by `inf/tos_add_user.zsh`:
 
 ```
-%team_of_six ALL=(team_of_six) NOPASSWD: /mnt/team_of_six/.local/bin/tos
+%team_of_six ALL=(team_of_six) NOPASSWD: /mnt/team_of_six/.local/bin/tos.zsh
 ```
 
-This grants members of the `team_of_six` group the ability to run exactly one binary — the TOS gateway — as the `team_of_six` user, without a password. Nothing else. An Architect cannot use this sudo permission to run arbitrary commands as the Ghost.
+This grants group members the ability to run exactly one binary — the TOS gateway — as the Ghost. Nothing else. An Architect cannot use this permission to run arbitrary commands.
 
-The gateway itself then checks `SUDO_USER` — the environment variable `sudo` sets to the original user's name — to determine who initiated the escalation. Every subsequent permission check (lock ownership, hallucination validation) uses `SUDO_USER` rather than the current effective user. This means the Ghost always knows which Architect made the request, even though it is running as `team_of_six`.
+The gateway sets `TOS_CONTROLLER_LOCKED=true` after successful escalation. Every module script checks this variable as its first line and exits immediately if it is not set. Direct invocation of any module script, bypassing the gateway, is therefore inert.
 
 ---
 
 ## The Control Plane Layout
 
-The control plane at `/mnt/team_of_six/` is structured for multi-tenant operation. Key ownership and permission boundaries:
-
 ```
-/mnt/team_of_six/                   owned: team_of_six:team_of_six  mode: 0750
+/mnt/team_of_six/                   owned: root:team_of_six        mode: 0750
 ├── .ipc/
 │   ├── locks/                      owned: team_of_six:team_of_six  mode: 0700
+│   │   ├── <project>_trinity_<N>.lock
+│   │   └── <project>_trinity_<N>.manifest   # Intent Lock visa
 │   └── <architect>/                owned: team_of_six:team_of_six  mode: 3770
 │       ├── inbox.md                owned: <architect>:team_of_six  mode: 0660
-│       └── outbox.md              owned: team_of_six:team_of_six  mode: 0660
+│       └── outbox.md               owned: team_of_six:team_of_six  mode: 0660
 ├── .local/
 │   ├── bin/                        owned: team_of_six:team_of_six  mode: 0750
 │   └── conf/
@@ -66,75 +64,110 @@ The control plane at `/mnt/team_of_six/` is structured for multi-tenant operatio
 
 Several design decisions are visible in these permissions:
 
-The **inbox** is owned by the Architect (not the Ghost), allowing the Architect to write payloads to it directly without escalation. The Ghost can read it because both are in the `team_of_six` group and the file is group-readable.
+The **inbox** is owned by the Architect, allowing them to write payloads directly without escalation. The Ghost can read it because both share the `team_of_six` group.
 
-The **outbox** is owned by the Ghost. The Architect can read it (group-readable) but cannot write to it directly. This prevents an Architect from forging outbox content.
+The **outbox** is owned by the Ghost. The Architect can read it but cannot write to it directly. This prevents forged outbox content.
 
-The **sandbox** is owned by the Ghost and mode 0700 — not even group-readable. The Architect cannot directly read or write the Ghost's working files. All interaction goes through the gateway.
+The **locks directory** is mode `0700` — Ghost-exclusive. This is where the `.manifest` visa lives. The Architect cannot edit or delete the visa from their own account without going through the formal `write plan` gateway command. The blast radius approved by the Architect via `write plan` is mechanically immutable from the Architect's perspective until the next `write plan` or Trinity finalization.
 
-The **`.token` file** is mode 0400, readable only by the Ghost. The GitHub token is never accessible to any Architect directly. It is injected into the environment by the gateway at execution time and unset before the gateway exits.
+The **sandbox** is mode `0700`, not even group-readable. The Architect cannot directly read or write the Ghost's working files. All interaction goes through the gateway.
 
-The **IPC ribbon directories** use setgid (mode 3770) so that files created within them inherit the `team_of_six` group regardless of which user creates them.
+The **`.token` file** is mode `0400` — Ghost-only. The GitHub token is loaded into the environment by the gateway and scrubbed via a registered `EXIT/INT/TERM` trap before the gateway exits. It is never written to any log, outbox, or temporary file.
+
+The **IPC ribbon directories** use setgid (`3770`) so that files created within them inherit the `team_of_six` group regardless of which user creates them.
+
+---
+
+## The HITL Destructive Gate (CONFIRM=TRUE)
+
+The `close` and `delete` modules are placed behind a hard mechanical gate. The gateway checks the `TOS_META` payload for the exact string `CONFIRM=TRUE` before evaluating any further logic. Its absence causes an immediate abort with a loud security warning.
+
+This catches the most dangerous class of LLM failure: a confused or stale Agent that hallucinates a destructive command. The Agent must explicitly write `CONFIRM=TRUE` in its payload — it cannot do this accidentally or by drift, because the string has no plausible role in any non-destructive operation.
+
+---
+
+## PAT MFA Isolation
+
+The Ghost's `.token` file must **not** carry `delete_repo` OAuth scope. This is a deployment requirement enforced by documentation and validated by the deploy script.
+
+When `tos <project> delete project` is called, the system hits a deliberate privilege boundary. The command triggers:
+
+```zsh
+gh auth refresh -s delete_repo
+```
+
+Because `tos` runs via `sudo -n` (non-interactive), this OAuth flow requires a human to open a browser and complete interactive authentication. An automated process — a runaway agent, a script, an accidentally chained command — cannot complete this step. This is out-of-band Multi-Factor Authentication for the nuclear operation.
+
+The elevated scope is revoked immediately after use. The gateway's `EXIT` trap calls:
+
+```zsh
+gh auth refresh --remove-scopes delete_repo
+```
+
+This trap fires on every exit path — success, failure, and interrupt — so the token is never left in an elevated state, regardless of what happens after the escalation.
+
+---
+
+## The Out-of-Band Recovery Doctrine
+
+TOS is designed with a strict **no automated self-healing** doctrine.
+
+If the Atomic Handover encounters a `git push` rejection — a remote merge conflict, a force-push protection, a network failure — the system halts immediately. It logs the complete Git error to the outbox. It does not attempt to `git pull --rebase`, resolve the conflict, or retry the push.
+
+Automated conflict resolution violates the physical isolation barrier: the Ghost would be making decisions about repository state that belong to the Architect. It also creates unauditable state changes — the Architect would see a clean outbox with no record of what the Ghost decided.
+
+The recovery path is always explicit Architect action:
+
+- Read the outbox to understand what failed and why.
+- If the work is safe on the remote, run `sync trinity <N>` to re-align the sandbox to the remote state.
+- If the Trinity needs to be abandoned cleanly, run `close trinity` to release the lock and return to Trinity 0.
+- If the conflict must be resolved on GitHub's remote interface, do so, then re-run `sync trinity`.
+
+The system's state is always recoverable. The Ghost never silently changes state.
 
 ---
 
 ## Multi-Tenant Operation
 
-Multiple Architects can work simultaneously on the same machine and, within a project, on different trinities. The lock system is designed to support this:
+Multiple Architects can work simultaneously on the same machine and, within a project, on different trinities.
 
-- Each Architect has their own IPC ribbon (`inbox.md`, `outbox.md`) under their named directory in `.ipc/`
-- Each Architect has their own sandbox under `sandbox/<architect>/`
-- Lock files in `.ipc/locks/` encode the owning Architect in their content, allowing multiple Architects to hold locks on the same project (on different trinities)
-- A hard lock is exclusive per trinity: if Architect A holds the hard lock on Trinity 3, Architect B cannot acquire it until A releases it
+- Each Architect has their own IPC ribbon and sandbox.
+- Lock files encode the owning Architect — multiple Architects can hold locks on the same project on different trinities simultaneously.
+- A hard lock is exclusive per trinity: Architect A holding Trinity 3 blocks Architect B from acquiring Trinity 3 until A releases it.
+- The `.manifest` visa is scoped to the lock: `<project>_trinity_<N>.manifest` belongs to whichever Architect holds the hard lock on Trinity N.
 
-There is no mechanism preventing two Architects from working on the same trinity simultaneously if they are in different sandboxes and the hard-lock contention check is not triggered (due to the acknowledged race condition). In practice, the GitHub branch itself provides the ultimate serialisation — conflicting pushes to the same branch will fail, and the second Architect will need to rebase.
+There is an acknowledged narrow race condition in `acquire.zsh` between the contention check and the lock write. This is not mechanically closed — `flock(2)` complexity is not warranted on a single-machine multi-user setup where the collision window is negligible and GitHub branch protection provides the ultimate serialisation.
 
 ---
 
 ## Deployment
 
-**Step 1: Run the deployment script as root**
+**Step 1 — Run the deployment script as root:**
 
 ```zsh
 sudo ./inf/tos_deploy.zsh
 ```
 
-This script:
-- Creates the `team_of_six` system user (no login shell, no home directory)
-- Creates the `team_of_six` group
-- Creates the control plane directory structure at `/mnt/team_of_six/`
-- Copies the TOS binaries to `.local/bin/` with correct ownership and permissions
-- Verifies that all required dependencies are installed (`zsh`, `git`, `gh`, `rsync`, etc.)
-- **Automatically calls `inf/tos_add_user.zsh` for the deploying user** — you do not need to run Step 3 manually for yourself, only for additional Architects
+This script creates the `team_of_six` system user and group, provisions the control plane directory structure with correct permissions, copies TOS binaries via `rsync --delete`, prompts for the GitHub token, and automatically runs `inf/tos_add_user.zsh` for the deploying user.
 
-**Step 2: Install the GitHub token**
+**Step 2 — Install the GitHub token:**
 
 ```zsh
 sudo -u team_of_six tee /mnt/team_of_six/.local/conf/.token <<< "your-token-here"
 sudo chmod 0400 /mnt/team_of_six/.local/conf/.token
 ```
 
-Verify the token works:
+The token must have repository and issue permissions. It must **not** have `delete_repo` scope — that scope is acquired interactively only when needed and revoked immediately after.
 
-```zsh
-sudo -u team_of_six gh auth status --token "$(sudo cat /mnt/team_of_six/.local/conf/.token)"
-```
-
-**Step 3: Add Architects**
-
-For each developer who will use TOS:
+**Step 3 — Add Architects:**
 
 ```zsh
 sudo ./inf/tos_add_user.zsh <username>
 ```
 
-This adds the user to the `team_of_six` group, provisions their IPC ribbon under `.ipc/<username>/`, creates their sandbox directory under `sandbox/<username>/`, and installs the sudoers entry.
+This adds the user to the `team_of_six` group, provisions their IPC ribbon, creates their sandbox directory, and installs the sudoers entry validated via `visudo -c`. The user must log out and back in for group membership to take effect.
 
-The user must log out and back in for the group membership to take effect.
-
-**Step 4: Verify**
-
-As each Architect, verify the installation:
+**Step 4 — Verify:**
 
 ```zsh
 tos --help
@@ -144,15 +177,15 @@ If the gateway runs and shows the usage message, the installation is working.
 
 ---
 
-## After Development: Cleanup
+## Post-Session Cleanup
 
-After a tutorial run or test session, the Ghost's sandbox may contain test repositories that should be removed. The `inf/post_test_cleanup.zsh` script handles this:
+After a tutorial or test session, run:
 
 ```zsh
 sudo ./inf/post_test_cleanup.zsh
 ```
 
-This removes test sandbox directories and deletes any lock files left by the session. It does not remove Architect provisioning or the token — those are persistent.
+This acquires the `delete_repo` scope interactively, deletes test repositories from GitHub, removes local and sandbox directories, and offers to revoke the elevated scope on exit.
 
 ---
 

@@ -1,4 +1,4 @@
-← [01-llm-pitfalls.md](01-llm-pitfalls.md) | Next: [03-trinity.md](03-trinity.md) →
+← [01-theSocialContract.md](01-theSocialContract.md) | Next: [03-trinity.md](03-trinity.md) →
 
 ---
 
@@ -12,54 +12,58 @@ This document describes how TOS is structured: the major components, the boundar
 
 Every operation in TOS involves three conceptual actors. Understanding their separation is prerequisite to understanding the architecture.
 
-**The Architect** is the human developer. The Architect owns the repository, initiates commands, reviews output, and makes all final decisions. The Architect operates in their normal user account on the development machine. They do not have direct access to the Ghost's sandbox or the control plane.
+**The Architect** is the human developer. The Architect owns the repository, initiates commands, reviews output, approves Intent Locks, and makes all final decisions. The Architect operates in their normal user account on the development machine. They do not have direct access to the Ghost's sandbox or the control plane.
 
-**The Ghost** is the AI agent — specifically, the `team_of_six` system user under which all privileged operations execute. When you run `tos myproject write code`, your command is escalated via `sudo` to run as the Ghost. The Ghost has access to the sandbox, the IPC ribbon, and the GitHub token. The Ghost never interacts with the LLM directly — it executes validated payloads that the LLM produced.
+**The Ghost** is the AI agent — specifically, the `team_of_six` system user under which all privileged operations execute. When you run `tos myproject write code`, your command is escalated via `sudo` to run as the Ghost. The Ghost has access to the sandbox, the IPC ribbon, and the GitHub token. The Ghost never interacts with the LLM directly — it executes validated payloads that the LLM produced. The LLM is explicitly untrusted; its output is treated as hostile input until the gateway validates it.
 
-**The Gateway** is the `bin/tos` script. It is the single entry point for every TOS operation. Nothing in the system executes without passing through the gateway first. The gateway enforces access control, validates context, enforces lock policies, and dispatches to the appropriate module. Neither the Architect nor the Ghost can bypass it.
+**The Gateway** is `bin/tos.zsh`. It is the single entry point for every TOS operation. Nothing in the system executes without passing through the gateway first. The gateway enforces access control, validates context, checks Intent Locks, enforces destructive gates, and dispatches to the appropriate module. Neither the Architect nor the Ghost can bypass it.
 
-This separation is not merely organisational. It creates a hard trust boundary: the Architect interacts with the Gateway, the Gateway decides what the Ghost is allowed to do, and the Ghost executes within those constraints. The LLM's output never executes directly — it is always mediated by the Ghost executing a validated payload.
+This separation creates a hard trust boundary: the Architect interacts with the Gateway, the Gateway decides what the Ghost is allowed to do, and the Ghost executes within those constraints.
 
 ---
 
 ## The Control Plane
 
-The control plane lives at `/mnt/team_of_six/` — a dedicated mount point that is distinct from any individual Architect's home directory or project workspace. This separation is intentional: the control plane is shared infrastructure, owned by the `team_of_six` system user, and structured to support multiple Architects working on multiple projects simultaneously.
+The control plane lives at `/mnt/team_of_six/` — a dedicated mount point distinct from any individual Architect's home directory. It is shared infrastructure structured to support multiple Architects working simultaneously.
 
 ```
 /mnt/team_of_six/
 ├── .ipc/
-│   ├── locks/            # Persistent lock files for all active sessions
-│   ├── <architect>/      # Per-Architect IPC ribbon
-│   │   ├── inbox.md      # Payloads written here by the Architect/LLM
-│   │   └── outbox.md     # Context and output written here by the Ghost
+│   ├── locks/                    # Lock files AND .manifest visas (mode 0700, Ghost-exclusive)
+│   │   ├── <project>_trinity_<N>.lock
+│   │   └── <project>_trinity_<N>.manifest
+│   └── <architect>/              # Per-Architect IPC ribbon (mode 3770, setgid)
+│       ├── inbox.md              # Architect writes payloads here directly
+│       └── outbox.md             # Ghost writes here; Architect reads only
 ├── .local/
-│   ├── bin/              # The deployed TOS binaries
-│   └── conf/             # Configuration and the GitHub token
+│   ├── bin/                      # Deployed TOS binaries (mode 0750)
+│   └── conf/
+│       ├── config                # Global configuration
+│       └── .token                # GitHub token (mode 0400, Ghost-only)
 └── sandbox/
-    └── <architect>/      # Per-Architect project sandboxes
-        └── <project>/    # Isolated Git clone of the repository
+    └── <architect>/
+        └── <project>/            # Isolated Git clone (mode 0700, Ghost-exclusive)
 ```
 
-The `locks/` directory is the heartbeat of the system. Every active working context corresponds to a lock file here. The gateway reads these files on every invocation to determine what is allowed.
-
-The `sandbox/` directory contains the Ghost's working copies of repositories. These are plain Git clones, but they are owned by the Ghost and isolated from the Architect's own checkouts. The Ghost makes commits, pushes branches, and reads file state from the sandbox. It never touches the Architect's working tree.
+The `locks/` directory is the heartbeat of the system. Every active working context corresponds to a lock file here. Critically, this is also where the **Locked Manifest** lives: `<project>_trinity_<N>.manifest` is a physical visa file listing the exact set of files the Agent is authorised to mutate in the current Trinity. Because this directory is mode `0700` and owned exclusively by the Ghost, the Architect cannot edit or bypass the visa from their own account — the only way to create or change it is through the formal `write plan` gateway command.
 
 ---
 
-## The Module System
+## The Five-Phase Module Taxonomy
 
-TOS commands are structured as `tos <project> <module> <action>`. The three modules are:
+TOS commands follow the structure `tos <project> <module> <action>`. The lifecycle is divided into five phases, each with its own module:
 
-**`sync`** — workspace lifecycle management. Getting into a working context, transitioning between trinities, provisioning sandboxes, and merging completed work. These commands manage the relationship between the Ghost's local state and the remote repository.
+**`create`** — Inception. Generating the foundational remote truth on GitHub. Actions: `project`, `trinity`, `issue`.
 
-**`write`** — mutation operations. Creating GitHub issues, committing code changes, posting comments. These commands change the state of the repository or its associated GitHub resources.
+**`sync`** — Alignment. Workspace lifecycle management. Getting into a working context, checking out branches, generating the Clean Room Snapshot. Actions: `start`, `trinity`, `peek`.
 
-**`system`** — meta-operations. Exporting parser configurations, administrative tasks. These commands operate on the TOS infrastructure itself rather than on a project.
+**`write`** — Mutation. Operations that change state. Actions: `plan` (Intent Lock), `code` (file mutation and commit), `comment` (GitHub thread), `trinity` (MANIFEST-verified closure).
 
-Each module has its own directory under `bin/` with a `tos` router script that dispatches to individual action scripts. The main gateway dispatches to the module router; the module router dispatches to the action. This two-level dispatch keeps each file small and focused, and makes it straightforward to add new actions to an existing module without touching anything outside that module's directory.
+**`close`** — Finality. Graceful teardown. Squash-merging PRs, closing issues, removing local sandbox state without destroying remote history. Actions: `project`, `trinity`.
 
-The `utils/` directory sits outside the module system. It contains scripts that are called directly by other scripts — never by users, never by the gateway. The lock management scripts live here, as does the payload parser and the error trap. Utils have no routers because they have no user-facing interface.
+**`delete`** — Purge. Nuclear operations requiring explicit CONFIRM and out-of-band MFA. Scrubbing issue history, wiping repositories. Actions: `project`, `trinity`.
+
+Each module lives under `bin/modules/<module>/` with `soft/` and `hard/` subdirectories. The script's physical location is the sole authority on what lock tier is required. The gateway discovers actions dynamically from the filesystem — adding a new action requires only creating a script file; no gateway changes are needed.
 
 ---
 
@@ -67,29 +71,29 @@ The `utils/` directory sits outside the module system. It contains scripts that 
 
 When you type `tos myproject write code`, the following sequence occurs:
 
-**Stage 1 — The Bouncer.** The gateway checks whether you are running as the `team_of_six` system user. If you are not (which is the normal case — you are running as your own user), it checks that you are a member of the `team_of_six` group. If you are not in the group, you are rejected immediately with an access denied message. If you are in the group, it escalates the command via `sudo -n -u team_of_six` — that is, it re-executes the entire command as the Ghost, without a password prompt, relying on the sudoers configuration installed during deployment. If the sudo escalation fails for any reason, you see "The Threshold is sealed."
+**Stage 1 — Security Perimeter.** The gateway checks whether you are the `team_of_six` system user. If not, it verifies group membership and escalates via `sudo -n -u team_of_six`. If escalation fails, you see "The Threshold is sealed." On success, it sets `TOS_CONTROLLER_LOCKED=true` — every module script checks this variable as its first line and refuses to execute without it, making direct invocation impossible.
 
-**Stage 2 — The Ghost.** Now executing as `team_of_six`, the gateway verifies that `SUDO_USER` is defined (confirming this was a legitimate escalation rather than a direct login), sources the error trap, and parses the project name and module from the arguments.
+**Stage 2 — Configuration & Token Injection.** Sources the global config. Loads `GH_TOKEN` from the `0400` token file. Registers an `EXIT/INT/TERM` trap that scrubs both token variables and cleans all temporary directories — the token is never left in the environment after the gateway exits, regardless of exit path.
 
-**Stage 3 — The Workspace Safety Audit.** Before any command executes, the gateway scans every project directory in this Architect's sandbox and verifies that a lock file exists for that project owned by this Architect personally. If any project is found without a personal lock, the gateway exits immediately with an error. This check exists because a project in the sandbox without a lock indicates either a system error or manual manipulation — both of which represent a context integrity risk. The remedy message tells the Architect exactly what to run to restore a clean state.
+**Stage 3 — Argument Parsing & Caller Location Verification.** Parses `<project> <module> <action>`. Verifies that `git remote get-url origin` matches the declared project name. A mismatch causes immediate rejection. This enforces that `tos` is always called from within the correct project directory root.
 
-**Stage 4 — Write Policy Enforcement.** If the module is `write`, the gateway applies additional checks. It determines the active lock type (soft or hard) and applies the write policy: a soft-lock (Trinity 0) permits task creation and comments but blocks code commits. A hard-lock permits everything. It then reads the payload from the inbox and extracts any `TARGET_PROJECT` and `TARGET_TRINITY` declarations, validating them against the actual system state. Finally it calls `verify.zsh` to confirm this Architect personally owns the active lock.
+**Stage 4 — Active Trinity Resolution.** Derives `TOS_ACTIVE_TRINITY` by grepping lock files in the control plane for `SUDO_USER:HARD_LOCK`. Nothing is read from the sandbox. Zero proprietary pollution.
 
-**Stage 5 — Dispatch.** The command is dispatched to the appropriate module router, with all output piped through `tee` to the outbox. This means the Ghost's output is always written to the IPC ribbon, where the Architect can read it and where it will be included in the next Clean Room Snapshot.
+**Stage 5 — Filesystem-Driven Dispatch & Lock Enforcement.** Discovers the target script from `modules/<module>/soft/` or `modules/<module>/hard/`. If the script is in `hard/` and `TOS_ACTIVE_TRINITY == 0`, the command is rejected. For `write code`, an additional check cross-references every declared file path against the active `.manifest` visa in the control plane. Any file not listed in the visa causes a `SEC-FAULT` rejection before a single byte is written to the sandbox.
+
+**Stage 6 — Inbox Truncation.** Immediately after parsing the payload, the inbox is truncated to zero bytes. This is the **Inbox Truncation Invariant** (ADR: Exact-Once Execution). If any subsequent operation fails, the payload is deliberately gone. The Architect must resubmit. This prevents duplicate commits, duplicate issue creation, and duplicate API calls on retry.
+
+**Stage 7 — Execution.** The target script is executed, with all output piped through `tee` to the Architect's outbox. Every command's complete output is always recoverable from the outbox.
 
 ---
 
 ## The IPC Boundary
 
-The IPC boundary is the most important architectural feature of TOS for understanding how the LLM integrates into the system. The LLM never calls TOS commands directly. It produces structured plaintext payloads in a defined block format, which the Architect (or the Neovim plugin) writes to the inbox file. The Ghost reads the inbox and executes the declared operations.
+The IPC boundary is the most important architectural feature of TOS for understanding how the LLM integrates into the system. The LLM never calls TOS commands directly. It produces structured plaintext payloads in a defined block format, which the Architect (or the Neovim plugin) writes to the inbox. The Ghost reads the inbox and executes the declared operations.
 
-This indirection is not accidental overhead. It serves several purposes:
+This indirection serves several purposes. Every LLM output is inspectable before it executes — the payload sits in the inbox as a file the Architect can read, modify, or delete. It forces the LLM to be explicit: a payload that does not declare a target file cannot create a file; a payload targeting a file outside its approved `.manifest` visa is blocked. And it creates an audit trail — every payload's output is written to the outbox by the gateway's tee pipe.
 
-First, it makes every LLM output inspectable before it executes. The payload sits in the inbox as a file. The Architect can read it, modify it, or delete it. Nothing happens until `tos` is called.
-
-Second, it forces the LLM to be explicit about its intent. A payload that does not declare a target file cannot create a file. A payload that does not declare a target trinity will be assigned the active lock's trinity. The LLM cannot act implicitly — it must state what it intends to do in a machine-parseable format.
-
-Third, it creates an audit trail. Every payload that passed through the inbox is preserved in the outbox (since the Gateway tees all output there). The history of what the Ghost did and why is always recoverable.
+Any `close` or `delete` operation adds a further layer: the gateway checks the `TOS_META` block for the exact string `CONFIRM=TRUE` before evaluating any further logic. Absence of this string causes an immediate, loud abort. This is the **HITL Destructive Gate**.
 
 The payload protocol is described in detail in [04-protocol.md](04-protocol.md).
 
@@ -97,12 +101,10 @@ The payload protocol is described in detail in [04-protocol.md](04-protocol.md).
 
 ## Why Shell Scripts
 
-TOS is implemented in Zsh shell scripts rather than a compiled language or a higher-level runtime. This is a deliberate choice with trade-offs in both directions.
+TOS is implemented in Zsh shell scripts rather than a compiled language or higher-level runtime. Shell scripts are universally available without dependency installation, compose naturally with Git and the GitHub CLI, are trivially auditable, and have zero startup overhead. Every TOS command is a series of filesystem operations, Git commands, and GitHub API calls — the natural domain of shell.
 
-The benefits: shell scripts are universally available on any Unix-like system without dependency installation, they compose naturally with Git and the GitHub CLI (`gh`), they are trivially auditable by a developer who wants to understand exactly what a command does, and they have zero startup overhead. Every TOS command is a series of filesystem operations, Git commands, and GitHub API calls — the natural domain of shell.
-
-The costs are the ones you would expect: limited error handling, no type system, the race condition in the lock acquisition that is acknowledged but not mechanically fixed, and the lack of a schema validator for the payload format (identified as a future improvement — a language-specific LSP-driven validator would close this gap properly).
+The one acknowledged exception is `export_parsers.zsh`, which currently uses `python3` for JSON merging. This is flagged as legacy technical debt in `inf/tos_deploy.zsh` and is slated for replacement with a native implementation, restoring full ADR compliance.
 
 ---
 
-← [01-llm-pitfalls.md](01-llm-pitfalls.md) | Next: [03-trinity.md](03-trinity.md) →
+← [01-theSocialContract.md](01-theSocialContract.md) | Next: [03-trinity.md](03-trinity.md) →

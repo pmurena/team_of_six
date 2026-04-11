@@ -4,63 +4,60 @@
 
 # 05 — The Development Workflow
 
-This document walks through the complete TOS development lifecycle — from initialising a project to merging finished work — in the order you will actually encounter each step. It is written as a narrative rather than a command reference, because understanding *why* each step happens is as important as knowing *what* to type.
+This document walks through the complete TOS development lifecycle in the order you will encounter each step, following the five-phase taxonomy: **create**, **sync**, **write**, **close**, **delete**.
 
-The tutorial at `test/interactive_tutorial.zsh` walks through the same lifecycle interactively. Reading this document first will make the tutorial much easier to follow.
-
----
-
-## Before You Begin: Prerequisites
-
-TOS operates on the assumption that:
-
-- You have run `inf/tos_deploy.zsh` as root on the machine where the Ghost will operate. This creates the `team_of_six` system user, provisions the control plane at `/mnt/team_of_six/`, installs the TOS binaries, and writes the sudoers entry that allows group members to escalate to the Ghost without a password.
-- Your user account has been added to the `team_of_six` group via `inf/tos_add_user.zsh`. You will need to log out and back in for the group membership to take effect.
-- A GitHub personal access token (or GitHub App token) with repository and issue permissions has been placed at `/mnt/team_of_six/.local/conf/.token`.
-- The `gh` CLI tool is installed and you have confirmed it can authenticate with the token.
+The interactive tutorial at `test/interactive_tutorial.zsh` demonstrates the same lifecycle with a real GitHub repository. Read this document first.
 
 ---
 
-## Phase 0: Establishing Remote Truth
+## Before You Begin
 
-TOS works against a real GitHub repository. Before the Ghost can do anything, there must be a repository to work on. If you are starting a new project:
+TOS assumes:
 
-```zsh
-mkdir myproject && cd myproject
-git init
-echo "# My Project" > README.md
-git add . && git commit -m "Initial commit"
-git branch -M main
-gh repo create myproject --private --source=. --remote=origin --push
+- `inf/tos_deploy.zsh` has been run as root on the machine where the Ghost will operate.
+- Your user account has been added to the `team_of_six` group via `inf/tos_add_user.zsh`. Log out and back in for group membership to take effect.
+- A GitHub personal access token with repository and issue permissions — but **without** `delete_repo` scope — has been placed at `/mnt/team_of_six/.local/conf/.token`.
+- The `gh` CLI is installed and authenticated.
+
+---
+
+## Phase 0 — Establishing Remote Truth (create project)
+
+TOS works against a real GitHub repository. If you are starting a new project, you must first create the remote repository. The Architect works with the Agent to define the project, and the Agent produces a payload:
+
+```
+===TOS_META_START===
+TARGET_PROJECT=myproject
+TITLE=myproject
+BODY=A fast integer calculator in Zsh.
+===TOS_META_END===
 ```
 
-This is the Architect's domain — creating the repository, establishing the initial structure, pushing to GitHub. TOS calls this "establishing Remote Truth": the GitHub repository is the authoritative state that the Ghost will mirror and work against. Everything the Ghost does is eventually reflected back to this remote.
+Write this to the inbox and run:
 
-Run all TOS commands from within this repository directory. The gateway reads the remote URL from `git remote get-url origin` to know where to clone from.
+```zsh
+tos myproject create project
+```
+
+The Ghost runs `git init`, `gh repo create`, and establishes the remote repository entirely from within the sandbox. The Architect's own working tree is not touched.
 
 ---
 
-## Phase 1: Provisioning the Sandbox
+## Phase 1 — Provisioning the Sandbox (sync start)
 
 ```zsh
 tos myproject sync start
 ```
 
-This command provisions the Ghost's isolated sandbox for your project. It clones the repository from GitHub into `/mnt/team_of_six/sandbox/<your-user>/myproject/`, configures the Git identity for the Ghost's commits, and acquires a Trinity 0 soft lock.
+This provisions the Ghost's isolated sandbox. It clones the repository from GitHub into `/mnt/team_of_six/sandbox/<your-user>/myproject/`, configures the Ghost's Git identity, and acquires a Trinity 0 soft lock. The sandbox is entirely separate from your own working copy of the repository.
 
-You will see the sandbox being created and a list of open issues (likely empty at this point). After this command completes, the Ghost has a clean, isolated copy of the repository and an active soft lock. The gateway's workspace safety audit will now pass on every subsequent invocation.
-
-The sandbox is entirely separate from your own working copy of the repository. You may continue to work in your local checkout normally — the Ghost's sandbox does not interfere with it.
+After this command, `tos myproject sync start` will reject if called again — the sandbox already exists.
 
 ---
 
-## Phase 2: Scoping (Creating Issues)
+## Phase 2 — Scoping (create issue)
 
-The Ghost cannot start writing code until there is an issue to work against. The Architect works with the LLM to define the work, then the LLM produces a payload that creates the issues:
-
-Ask your LLM: *"I need to implement a calculator module in Zsh. Scope this into atomic issues."*
-
-The LLM should produce a payload like:
+The Ghost cannot start writing code until there is an issue to work against. The Agent produces a batch of Issue blocks:
 
 ```
 ===TOS_ISSUE_START===
@@ -73,73 +70,97 @@ BODY=Implement integer subtraction using native Zsh arithmetic.
 ===TOS_ISSUE_END===
 ```
 
-Write this payload to the inbox (or use the Neovim plugin — see [07-neovim-plugin.md](07-neovim-plugin.md)), then run:
+Write to the inbox, then run:
 
 ```zsh
-tos myproject write tasks
+tos myproject create issue
 ```
 
-The Ghost reads the inbox, creates the issues on GitHub, and clears the inbox. You can verify with `gh issue list`. Each issue now has a number — these are your trinity IDs.
-
-Note that this command runs under the soft lock (Trinity 0) and does not require a hard lock. Creating issues is a planning operation, and the write policy permits it in the baseline state.
+The Ghost creates each issue on GitHub and clears the inbox. Each issue number becomes a Trinity ID. Verify with `gh issue list`.
 
 ---
 
-## Phase 3: Opening a Workspace
+## Phase 3 — Opening a Workspace (create trinity + sync trinity)
+
+First, create the remote architecture for the Trinity:
+
+```zsh
+tos myproject create trinity 1
+```
+
+This creates branch `tos-work-1` from `origin/main` and opens a Draft PR linked to Issue #1.
+
+Then align the sandbox and generate the Clean Room Snapshot:
 
 ```zsh
 tos myproject sync trinity 1
 ```
 
-This transitions from the sanctuary state (Trinity 0) to active work on issue #1. The Atomic Handover sequence runs: any existing hard lock is pushed and released, a new hard lock is acquired for Trinity 1, the branch `tos-work-1` is checked out (or created if it does not exist), and the Clean Room Snapshot is generated and written to the outbox.
+This triggers the **Atomic Handover**: any existing hard lock is safely pushed and released, a new hard lock is acquired for Trinity 1, the branch is checked out, and the Clean Room Snapshot is written to the outbox. The outbox now contains the full issue description, any comments, the diff against main, and the repository file signature map.
 
-The outbox now contains a complete picture of the current state: the issue description and any comments, the diff against main (empty at this point), and the repository file list. This is what you provide to the LLM as context for the next session.
-
-From this point, `tos myproject write code` is permitted. The Ghost is locked into Trinity 1 and can only commit to `tos-work-1`.
+Provide this outbox content to the Agent as context for the next session.
 
 ---
 
-## Phase 4: Injecting Existing Context (Peek)
+## Phase 4 — Injecting Existing Context (sync peek)
 
-Before asking the LLM to write new code, it is often useful to show it what already exists. The peek command reads a specific file from the sandbox and appends it to the outbox:
+Before asking the Agent to write new code, you can inject specific file content from the sandbox:
 
 ```zsh
 tos myproject sync peek utils.zsh
 ```
 
-After this, the outbox contains both the Clean Room Snapshot and the full content of `utils.zsh`. The LLM can see the existing `log()` function and know to use it in any new code it produces, rather than inventing its own logging mechanism.
+The outbox will contain both the Clean Room Snapshot and the full content of `utils.zsh`. The Agent can see the existing `log()` function and know to use it, rather than inventing its own.
 
-This is the surgical context injection pattern: rather than pasting entire files into the chat, you inject exactly what the LLM needs to know, nothing more.
+Peek appends to the outbox — it does not reset the snapshot. Run `sync trinity <N>` to get a clean snapshot before starting a new session.
 
 ---
 
-## Phase 5: The Red Phase (Failing Tests)
+## Phase 5 — Declaring Intent (write plan)
 
-TOS encourages a TDD cycle: write the failing test first, then implement, then refactor. The LLM produces a payload for the test:
+Before the Agent is permitted to write code, it must declare the exact set of files it intends to touch. This is the **Intent Lock**. After the Agent produces its Plan step in the Micro-Protocol, it outputs a Plan block:
+
+```
+===TOS_PLAN_START===
+APPROVED_FILES=calculator.zsh test_calculator.zsh
+===TOS_PLAN_END===
+```
+
+Write to the inbox and run:
+
+```zsh
+tos myproject write plan
+```
+
+The Gateway writes these filenames to a `.manifest` visa in the control plane. From this point, any `write code` payload attempting to touch a file not in this list will be rejected with a `SEC-FAULT` before the sandbox is touched. The Intent Lock is set.
+
+---
+
+## Phase 6 — The Red Phase (write code, failing tests)
+
+The Agent produces the failing test payload. Because the Intent Lock is active, only `calculator.zsh` and `test_calculator.zsh` are permitted:
 
 ```
 ===TOS_META_START===
 TARGET_PROJECT=myproject
 TARGET_TRINITY=1
 TITLE=Red: failing test for add()
-BODY=Test suite for the add() function. Tests will fail until implementation exists.
+BODY=Test suite for add(). Will fail until implementation exists.
 ===TOS_META_END===
 ===TOS_FILE_START: test_calculator.zsh===
 #!/bin/zsh
-source ./utils.zsh
 source ./calculator.zsh 2>/dev/null || true
-log "Running tests..."
 [[ "$(add 5 5)" == "10" ]] || exit 1
 ===TOS_FILE_END===
 ```
 
-Write to inbox, then:
+Write to the inbox and run:
 
 ```zsh
 tos myproject write code
 ```
 
-The Ghost validates the payload, writes the test file to the sandbox, commits it to `tos-work-1`, and pushes to origin. You can verify:
+The Ghost validates the payload against the manifest, truncates the inbox, writes the test file to the sandbox, commits it to `tos-work-1`, and pushes to origin. Verify:
 
 ```zsh
 git fetch origin
@@ -148,40 +169,34 @@ git diff origin/main...origin/tos-work-1
 
 ---
 
-## Phase 6: Review and Routing
+## Phase 7 — Review and Routing
 
-The Architect reviews the Ghost's work directly on the branch. This may involve:
-
-- Checking out the branch locally to run the test: `git checkout tos-work-1 && zsh test_calculator.zsh`
-- Adding inline review tags to files: comments marked `[FIXME]`, `[QUESTION]`, `[CHALLENGE]`, `[TODO]`
-- Posting questions to the issue thread: `gh issue comment 1 -b "[QUESTION] Should we handle non-integer inputs?"`
-
-After adding review tags, commit and push:
+The Architect reviews the Ghost's work directly on the branch:
 
 ```zsh
-git commit -am "Architect review: inline tags" && git push origin tos-work-1
+git checkout tos-work-1 && zsh test_calculator.zsh
 ```
 
-Then sync the changes back to the Ghost's context:
+Add inline review tags (`[FIXME]`, `[QUESTION]`, `[CHALLENGE]`, `[TODO]`), commit and push, then sync back to the Agent's context:
 
 ```zsh
 tos myproject sync trinity 1
 ```
 
-This regenerates the Clean Room Snapshot, which now includes the Architect's review comments from the issue thread and the updated diff showing the inline tags. The LLM reads the updated outbox and produces response payloads — answers to questions, proposed fixes for the flagged items — using `write comment` for discussion and `write code` for fixes.
+The regenerated snapshot includes the Architect's review comments and the updated diff. The Agent reads the updated outbox and produces response payloads — answers via `write comment`, fixes via `write code`.
 
 ---
 
-## Phase 7: The Green Phase (Implementation)
+## Phase 8 — The Green Phase (write code, implementation)
 
-The LLM has seen the failing test and the review feedback. It now produces the implementation:
+The Agent produces the implementation payload. Both files are in the manifest:
 
 ```
 ===TOS_META_START===
 TARGET_PROJECT=myproject
 TARGET_TRINITY=1
 TITLE=Green: implement add()
-BODY=Implements add() to satisfy the failing test. Resolves [FIXME] from review.
+BODY=Implements add() to satisfy the failing test. Fixes #1.
 ===TOS_META_END===
 ===TOS_FILE_START: calculator.zsh===
 #!/bin/zsh
@@ -189,42 +204,86 @@ add() { echo $(( $1 + $2 )); }
 ===TOS_FILE_END===
 ```
 
-After `tos myproject write code`, the Architect checks out the branch, runs the tests locally, and verifies they pass. The Green phase is complete when the tests pass on the branch.
+After `tos myproject write code`, the Architect checks out the branch, runs the tests locally, and verifies they pass.
 
 ---
 
-## Phase 8: Refactor and Documentation
+## Phase 9 — Refactor and Retrospective (write code)
 
-With passing tests, the LLM can safely refactor — improving code clarity, adding documentation, tightening up edge cases — without breaking functionality. The same `write code` command applies. Each refactor payload includes updated files; the Ghost commits them to the same branch.
-
-The Documentation Update is a specialized refactor where the LLM synchronizes project documentation with the insights gained during the Trinity. While any file may be modified during this phase, no new functional code is written. Instead, the LLM updates the README, /docs directory, Architecture Decision Records (ADRs), inline comments, and docstrings.
-
-In this phase, the LLM may also propose new issues or comment on existing ones to bridge the gap between Trinities. This step is crucial: it lays the foundation for future context snapshots and acts as the cement holding the project together. It is the moment where the codebase transitions from raw logic into shared knowledge for both the LLM and the human developer.
+With passing tests, the Agent refactors and updates documentation. The same `write code` command applies — the manifest visa remains active. During the mandatory Retrospective phase, the Agent commits updates to `docs/` and `llm_agents/code.md`, encoding session learnings as versioned rules for future Trinities.
 
 ---
 
-## Phase 9: Merge and Teardown
+## Phase 10 — Trinity Closure (write trinity)
 
-When the Architect is satisfied with the work:
+When the Architect is satisfied, the Agent produces a Trinity block. The `MANIFEST` field must exactly match `git diff --name-only origin/main...HEAD`:
 
-```zsh
-tos myproject remove 1
+```
+===TOS_TRINITY_START===
+TARGET_PROJECT=myproject
+TARGET_TRINITY=1
+MANIFEST=calculator.zsh test_calculator.zsh
+===TOS_TRINITY_END===
 ```
 
-This runs the Traceable Finality sequence: posts a closing comment to the issue thread with the final revision hash, closes the PR, closes the issue, deletes the local branch, releases the hard lock, and transitions back to Trinity 0 via `sync trinity 0`. The outbox is refreshed with a new Clean Room Snapshot reflecting the current state of main.
+Write to the inbox and run:
 
-The repository now contains the merged work. Issue #1 is closed. The Ghost is back in the sanctuary state, ready to begin Trinity 2.
+```zsh
+tos myproject write trinity
+```
+
+The Gateway audits the MANIFEST against the actual diff. If they match, it posts a `[VERIFIED]` closing comment to the issue, closes the PR, closes the issue as "completed", deletes the remote branch, checks out main, releases the hard lock, and transitions to Trinity 0. The `.manifest` visa is consumed and deleted.
+
+The Ghost is back in the sanctuary state, ready to begin Trinity 2.
 
 ---
 
-## The Retrospective Pattern
+## Phase 11 — Sandbox Teardown (close project)
 
-Before closing a Trinity, the LLM reviews its findings and proposes updates to the `llm_agents/` directory. This folder houses the behavioral rules governing human-LLM interactions. If a Trinity reveals a problematic pattern or a highly effective approach, the LLM encodes that knowledge into its own rule files. These updates are then submitted via PR for the Agent Maintainer to review.
+When all work on a project is complete and the sandbox is no longer needed:
 
-To avoid proprietary pollution of project repositories, these updates are managed within the "Team of Six" core engine. Specific agents can be defined to accommodate language-specific nuances, corporate guidelines, and other global constraints.
+```zsh
+tos myproject close project
+```
 
-This phase creates a self-improvement loop: the Agent’s constraints evolve, becoming increasingly calibrated for high-quality agentic coding. This is where humans and LLMs synchronize to unleash the full power of the Team of Six — where 1 becomes 6.
- 
+The Gateway verifies no active hard lock exists, then runs `rm -rf` on the local sandbox directory. The remote repository on GitHub is untouched.
+
+---
+
+## Phase 12 — The Nuclear Purge (delete project)
+
+If a project needs to be completely eradicated from GitHub:
+
+```
+===TOS_META_START===
+TARGET_PROJECT=myproject
+TARGET_TRINITY=0
+TITLE=Delete myproject
+BODY=Project complete. Remove remote repository.
+CONFIRM=TRUE
+===TOS_META_END===
+```
+
+Write to the inbox and run:
+
+```zsh
+tos myproject delete project
+```
+
+**PAT MFA Isolation:** The Ghost's token deliberately lacks `delete_repo` scope. The command will pause and require interactive browser-based OAuth authentication (`gh auth refresh -s delete_repo`). This is an out-of-band MFA step that cannot be completed non-interactively — automated processes cannot destroy repositories.
+
+Once authenticated, the GitHub repository is deleted, the local sandbox is wiped, and the elevated scope is revoked immediately via the gateway's `EXIT` trap — regardless of whether the deletion succeeded or failed.
+
+---
+
+## The Out-of-Band Recovery Doctrine
+
+If any operation fails at a critical boundary — a `git push` rejection during the Atomic Handover, a GitHub API failure during trinity closure — TOS halts immediately. It logs the full error to the outbox and makes no attempt to self-heal, rebase, or resolve the conflict automatically.
+
+Automated self-healing violates the physical isolation barrier. The Architect reads the outbox, resolves the truth manually (e.g., via `close trinity` to abort cleanly, or by resolving the conflict on GitHub's remote interface before re-running `sync trinity`), and reissues the command.
+
+The system's state is always recoverable by explicit Architect action. The Ghost never silently changes state.
+
 ---
 
 ← [04-protocol.md](04-protocol.md) | Next: [06-security.md](06-security.md) →

@@ -205,7 +205,7 @@ show_role "$YELLOW" "ARCHITECT" "Executing: tos sync peek utils.zsh"
 "$TOS_BIN_CMD" "$TEST_REPO" sync peek utils.zsh
 
 show_role "$CYAN" "AGENT" "My context has been updated. I can now 'see' the log() function."
-terminal_view "cat outbox.md" "$(cat "$TOS_CONTEXT")"
+terminal_view "cat "$TOS_CONTEXT")"
 end_turn
 
 # ==============================================================================
@@ -261,9 +261,7 @@ EOF
 present_chapter "$CH6"
 
 show_role "$YELLOW" "ARCHITECT" "Checking out Ghost PR branch and injecting review tags..."
-# Ensure local refs are fresh and force-reset to the remote commit
-git fetch origin -q
-git checkout -B tos-work-1 origin/tos-work-1 -q
+git checkout tos-work-1 -q
 
 gh issue comment 1 -b "[QUESTION] Should we support negative numbers?" >/dev/null
 sed -i 's/exit 1/exit 1 # [FIXME] logic missing/' test_calculator.zsh
@@ -403,7 +401,7 @@ TARGET_TRINITY=1
 TITLE=Retro: Enforce parameter validation
 BODY=Update agent rules to always check param length before Zsh math evaluation.
 ===TOS_META_END===
-===TOS_FILE_START: llm_agents/code.md===
+===TOS_FILE_START: doc/some_learning.md===
 Rule 1: Use native Zsh math.
 Rule 2: Check integer count before math blocks.
 ===TOS_FILE_END===
@@ -442,19 +440,32 @@ git push origin tos-work-1 -q
 show_role "$YELLOW" "ARCHITECT" "Formally Reviewing the Pull Request..."
 gh pr review tos-work-1 --comment -b "Excellent work. Transcript preserved. Looks good to merge."
 
-show_role "$YELLOW" "ARCHITECT" "Merging PR and syncing local branches..."
-"$TOS_BIN_CMD" "$TEST_REPO" write trinity
+show_role "$CYAN" "AGENT" "Declaring TRINITY manifest for merge validation..."
+PAYLOAD_TRINITY=$(cat << EOF
+===TOS_TRINITY_START===
+TARGET_PROJECT=$TEST_REPO
+TARGET_TRINITY=1
+MANIFEST=calculator.zsh test_calculator.zsh README.md doc/some_learning.md=
+===TOS_TRINITY_END===
+EOF
+)
+echo "$PAYLOAD_TRINITY" > "$TOS_INPUT"
 
+show_role "$YELLOW" "ARCHITECT" "Merging PR and syncing local branches..."
+
+# 1. ADD THIS CHECK: Fail fast if trinity.zsh aborts
+if ! "$TOS_BIN_CMD" "$TEST_REPO" write trinity; then
+    echo -e "\n🚨 Tutorial Aborted: 'write trinity' failed. The workspace has been preserved for inspection."
+    exit 1
+fi
+
+# 2. KEEP THIS: Clean up local branch after a SUCCESSFUL merge
 show_role "$YELLOW" "ARCHITECT" "Cleaning up Architect local workspace..."
 git checkout main -q
 git branch -D tos-work-1 -q 2>/dev/null || true
 
-show_role "$YELLOW" "ARCHITECT" "Ensuring Issue #1 is Closed..."
-gh issue close 1 -r "completed" 2>/dev/null || true
+# 3. DELETE THIS: Removed the redundant gh issue close 1 command
+
+# 4. KEEP THIS: Just view the status to prove trinity.zsh closed it
 terminal_view "Issue #1 Status" "$(gh issue view 1 | grep -i state)"
 
-show_role "$PURPLE" "GHOST" "Session closed. The Trinity is complete."
-terminal_view "ls -R" "$(ls -R)"
-
-echo -e "\n${YELLOW}ℹ️  NOTE: To fully clean the Ghost's secured sandbox, run \`sudo ./inf/post_test_cleanup.zsh\` after exiting.${NC}\n"
-end_turn

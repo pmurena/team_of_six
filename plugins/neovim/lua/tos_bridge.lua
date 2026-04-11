@@ -406,7 +406,7 @@ local function register_keymaps()
     vim.keymap.set("n", "<leader>6wc", function() write_action("code")    end, opts("Write [C]ode"))
     vim.keymap.set("n", "<leader>6wm", function() write_action("comment") end, opts("Write Comment"))
     vim.keymap.set("n", "<leader>6wi", function() write_action("issue") end, opts("Write [I]ssue"))
-    vim.keymap.set("n", "<leader>6wi", "<leader>6wt", function() write_action("trinity") end, opts("Write [T]rinity"))
+    vim.keymap.set("n", "<leader>6wt", function() write_action("trinity") end, opts("Write [T]rinity"))
 end
 
 local function deregister_keymaps()
