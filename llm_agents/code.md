@@ -196,9 +196,10 @@ Red-to-Green TDD: Write the test to fail first. If a Negative Path or NFR test p
 
 ## Learning while we build nvios/tos.
 atomic flies, grouped in sematic folder structures help both, human and llm to keep track/context.
+
 you must alwys start with the flow, a uc, test it and then build the supporting surrounding. Controller first, supproting command second.
+
 when starting from the flow, mock the contracts of the modudles/commands you will need, don't build them yet.
-you must alwys start with the flow, a uc, test it and then build the supporting surrounding. Controller first, supproting command second.
-when starting from the flow, mock the contracts of the modudles/commands you will need, don't build them yet.
-we should forther protect the context window by having a escaleting answer path. first answer yes/no, if the architct is confused he'll ask why? and you provide a condensed answer under 10 lines. if the architec is still confused he'll ask to elaborated, then comes the long answer versions. It saves time, context window pullution and tokens.
+
+we should further protect the context window by having a escaleting answer path. first answer yes/no, if the architct is confused he'll ask why? and you provide a condensed answer under 10 lines. if the architec is still confused he'll ask to elaborated, then comes the long answer versions. It saves time, context window pullution and tokens.
 
