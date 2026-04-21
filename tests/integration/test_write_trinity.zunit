@@ -1,0 +1,114 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/integration/test_write_trinity.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   bin/modules/write/hard/trinity.zsh — the retrospective MANIFEST audit and
+#   full trinity closure sequence.
+#
+# WHAT IS THE RETROSPECTIVE MANIFEST AUDIT?
+#   Before merging, `write trinity` asks git what files actually changed on the
+#   work branch compared to main. It then compares that list against the
+#   MANIFEST field in the TRINITY payload. If they differ even by one file,
+#   it means the agent's claimed output does not match reality — a CONTEXT
+#   HALLUCINATION — and closure is aborted.
+#
+#   If they match, the module executes full closure:
+#     1. `gh pr merge --squash`      (merge the PR)
+#     2. `gh issue close`            (close the linked issue)
+#     3. `git branch -D tos-work-N`  (delete the work branch locally)
+#     4. Delete the lock file        (release the hard lock)
+#     5. Delete the manifest visa    (clean up intent lock)
+#
+# PRECONDITIONS
+#   Hard lock active on trinity 1.
+#   Manifest visa exists.
+#   `git diff` mock configured to return a known file list.
+# =============================================================================
+
+@setup {
+    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    scaffold_setUp
+    reset_mocks
+
+    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    echo "calculator.zsh test_calculator.zsh" \
+        > "${TOS_LOCKS}/test-project_trinity_1.manifest"
+    export TOS_ACTIVE_TRINITY="1"
+}
+
+@teardown {
+    scaffold_tearDown
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — Positive: MANIFEST matches diff → full closure executes
+# ---------------------------------------------------------------------------
+@test "[write trinity — positive] MANIFEST matches diff; full closure sequence executes" {
+    scaffold_write_inbox "${_FIXTURES}/valid_trinity_close.md"
+
+    # Mock `git diff --name-only` to return the same two files listed in the
+    # TRINITY fixture's MANIFEST field.
+    # We use a per-verb override so only `diff` calls return this output;
+    # other git calls (branch -D etc.) continue returning the default.
+    export TOS_MOCK_GIT_OUTPUT="calculator.zsh
+test_calculator.zsh"
+
+    # Mock gh to simulate a successful PR merge and issue close.
+    export TOS_MOCK_GH_OUTPUT='{"state":"MERGED"}'
+
+    local exit_code
+    zsh bin/tos.zsh test-project write trinity 2>&1
+    exit_code=$?
+
+    assert equal "${exit_code}" "0"
+
+    # PR must have been squash-merged.
+    assert_mock_called /tmp/tos_mock_gh_calls.log "pr merge --squash"
+
+    # Issue must have been closed.
+    assert_mock_called /tmp/tos_mock_gh_calls.log "issue close"
+
+    # Work branch must have been deleted.
+    local git_log
+    git_log=$(cat /tmp/tos_mock_git_calls.log)
+    echo "${git_log}" | grep -q "tos-work-1"
+    assert equal "$?" "0"
+
+    # Lock and manifest must be cleaned up.
+    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.lock"
+    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.manifest"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — Negative: MANIFEST mismatch → CONTEXT HALLUCINATION abort
+# ---------------------------------------------------------------------------
+# The git diff returns FEWER files than the TRINITY payload claims.
+# This means the agent hallucinated files that don't exist in the branch.
+@test "[write trinity — negative, MANIFEST mismatch] Triggers CONTEXT HALLUCINATION" {
+    # Payload claims both files are present.
+    scaffold_write_inbox "${_FIXTURES}/valid_trinity_close.md"
+
+    # But git diff only shows one file — mismatch!
+    export TOS_MOCK_GIT_OUTPUT="calculator.zsh"
+
+    local output exit_code
+    output=$(zsh bin/tos.zsh test-project write trinity 2>&1)
+    exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+
+    # PR must NOT have been merged.
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log "pr merge"
+
+    # Lock must still exist (no cleanup on failure).
+    assert_file_exists "${TOS_LOCKS}/test-project_trinity_1.lock"
+
+    # Output must use the "CONTEXT HALLUCINATION" terminology from the spec.
+    echo "${output}" | grep -qi "CONTEXT HALLUCINATION\|manifest.*mismatch\|mismatch.*manifest"
+    assert equal "$?" "0"
+}

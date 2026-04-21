@@ -1,0 +1,194 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/integration/test_sync_module.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   The Alignment module — commands that synchronise the Ghost sandbox with
+#   the remote repository and manage the Contextual Trinity lock lifecycle:
+#     `sync project`  → clone repo into sandbox + acquire SOFT_LOCK
+#     `sync trinity`  → Atomic Handover: push → release old → acquire new → snapshot
+#     `sync peek`     → append a file's content to the outbox (no lock change)
+#
+# KEY INVARIANTS UNDER TEST
+#   ADR 3  — Ephemeral Outbox: `sync trinity` regenerates the Clean Room
+#             Snapshot (overwrites outbox); `sync peek` APPENDS without wiping.
+#   ADR 11 — Out-of-Band Recovery: a push failure during `sync trinity` must
+#             halt immediately. No self-healing (no rebase/reset/pull).
+# =============================================================================
+
+@setup {
+    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    scaffold_setUp
+    reset_mocks
+
+    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    export TOS_ACTIVE_TRINITY="0"
+}
+
+@teardown {
+    scaffold_tearDown
+}
+
+# ===========================================================================
+# sync project
+# ===========================================================================
+
+@test "[sync project — positive] Provisions sandbox, clones repo, acquires SOFT_LOCK" {
+    # The sandbox directory must NOT exist before this call.
+    local sandbox_dir="${TOS_SANDBOX}/test_architect/test-project"
+    assert_dir_not_exists "${sandbox_dir}"
+
+    # Mock `git clone` so it creates the expected directory (simulating a real clone).
+    function git() {
+        echo "$*" >> /tmp/tos_mock_git_calls.log
+        if [[ "$*" == *clone* ]]; then
+            # Replicate what `git clone` would do: create the project directory.
+            mkdir -p "${sandbox_dir}"
+        fi
+    }
+
+    local exit_code
+    zsh bin/tos.zsh test-project sync project 2>&1
+    exit_code=$?
+
+    assert equal "${exit_code}" "0"
+    assert_mock_called /tmp/tos_mock_git_calls.log "clone"
+
+    # A SOFT_LOCK must have been acquired for trinity 0.
+    assert_file_exists "${TOS_LOCKS}/test-project_trinity_0.lock"
+    assert_file_contains "${TOS_LOCKS}/test-project_trinity_0.lock" "SOFT_LOCK"
+
+    # The outbox must contain a Clean Room Snapshot header (non-empty).
+    assert_file_nonempty "${TOS_OUTBOX}"
+}
+
+@test "[sync project — negative] Second call rejected when sandbox already exists" {
+    # Pre-create the sandbox directory to simulate an already-provisioned state.
+    mkdir -p "${TOS_SANDBOX}/test_architect/test-project"
+
+    local output exit_code
+    output=$(zsh bin/tos.zsh test-project sync project 2>&1)
+    exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+
+    echo "${output}" | grep -qi "already exists\|already provisioned\|duplicate"
+    assert equal "$?" "0"
+
+    # No additional git clone must have been attempted.
+    assert_mock_not_called /tmp/tos_mock_git_calls.log "clone"
+}
+
+# ===========================================================================
+# sync trinity (Atomic Handover)
+# ===========================================================================
+
+@test "[sync trinity — positive] Atomic Handover: push → release old lock → acquire new → snapshot" {
+    # Set up the pre-condition: architect holds a HARD_LOCK on trinity 1,
+    # currently working on branch tos-work-1.
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+
+    # Ensure the sandbox directory exists (would have been cloned by sync project).
+    mkdir -p "${TOS_SANDBOX}/test_architect/test-project"
+
+    local exit_code
+    zsh bin/tos.zsh test-project sync trinity 2 2>&1
+    exit_code=$?
+
+    assert equal "${exit_code}" "0"
+
+    # git push must appear in the log (pushing prior work before locking changes).
+    assert_mock_called /tmp/tos_mock_git_calls.log "push"
+
+    # The old lock for trinity 1 must be gone.
+    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.lock"
+
+    # A new HARD_LOCK for trinity 2 must exist.
+    assert_file_exists "${TOS_LOCKS}/test-project_trinity_2.lock"
+    assert_file_contains "${TOS_LOCKS}/test-project_trinity_2.lock" "HARD_LOCK"
+
+    # git must have switched to the new work branch.
+    local git_log
+    git_log=$(cat /tmp/tos_mock_git_calls.log)
+    echo "${git_log}" | grep -q "tos-work-2"
+    assert equal "$?" "0"
+
+    # Outbox must have been OVERWRITTEN with a fresh snapshot (ADR 3).
+    assert_file_nonempty "${TOS_OUTBOX}"
+    assert_file_contains  "${TOS_OUTBOX}" "trinity 2\|TARGET_TRINITY=2"
+}
+
+@test "[sync trinity — negative] Push failure halts with no self-healing (ADR 11)" {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+    mkdir -p "${TOS_SANDBOX}/test_architect/test-project"
+
+    # Force git push to fail.
+    export TOS_MOCK_GIT_EXIT_push="1"
+
+    local output exit_code
+    output=$(zsh bin/tos.zsh test-project sync trinity 2 2>&1)
+    exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+
+    # The outbox must contain the error (Architect needs to see it).
+    assert_file_nonempty "${TOS_OUTBOX}"
+
+    # OLD lock must still exist — push failed, so the handover never completed.
+    assert_file_exists    "${TOS_LOCKS}/test-project_trinity_1.lock"
+
+    # New lock for trinity 2 must NOT have been created.
+    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_2.lock"
+
+    # Absolutely no self-healing: no rebase, no pull, no reset in the git log.
+    assert_mock_not_called /tmp/tos_mock_git_calls.log "rebase"
+    assert_mock_not_called /tmp/tos_mock_git_calls.log "pull"
+    assert_mock_not_called /tmp/tos_mock_git_calls.log "reset"
+}
+
+# ===========================================================================
+# sync peek
+# ===========================================================================
+
+@test "[sync peek — positive] File content appended to outbox without snapshot reset" {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+
+    # Create a file in the sandbox that the architect wants to inspect.
+    local sandbox_dir="${TOS_SANDBOX}/test_architect/test-project"
+    mkdir -p "${sandbox_dir}"
+    echo '#!/bin/zsh' > "${sandbox_dir}/calculator.zsh"
+    echo 'add() { echo $(( $1 + $2 )); }' >> "${sandbox_dir}/calculator.zsh"
+
+    # Seed the outbox with existing snapshot content.
+    echo "EXISTING_SNAPSHOT_CONTENT" > "${TOS_OUTBOX}"
+
+    local exit_code
+    zsh bin/tos.zsh test-project sync peek calculator.zsh 2>&1
+    exit_code=$?
+
+    assert equal "${exit_code}" "0"
+
+    # Existing snapshot must still be present (not wiped).
+    assert_file_contains "${TOS_OUTBOX}" "EXISTING_SNAPSHOT_CONTENT"
+
+    # The file's content must have been appended.
+    assert_file_contains "${TOS_OUTBOX}" "add()"
+}
+
+@test "[sync peek — negative] Non-existent file causes graceful error" {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+
+    local output exit_code
+    output=$(zsh bin/tos.zsh test-project sync peek does_not_exist.zsh 2>&1)
+    exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+    echo "${output}" | grep -qi "not found\|no such file\|missing"
+    assert equal "$?" "0"
+}

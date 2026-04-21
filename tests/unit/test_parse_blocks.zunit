@@ -1,0 +1,189 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/unit/test_parse_blocks.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   bin/utils/parse_blocks.zsh — the AWK-based parser that reads the TOS
+#   protocol from the inbox and extracts each block's fields into individual
+#   files under a numbered output directory.
+#
+# PROTOCOL OVERVIEW (for new readers)
+#   The TOS IPC protocol uses tagged plain-text blocks inside Markdown files:
+#
+#       ===TOS_META_START===
+#       KEY=value
+#       ===TOS_META_END===
+#
+#   The parser produces a directory tree:
+#       <output_dir>/
+#         1/              ← first META block; key-value fields as .txt files
+#         file_1/         ← first FILE block; _TARGET.txt + RAW_BODY.txt
+#         file_2/         ← second FILE block
+#         plan_1/         ← first PLAN block
+#         issue_1/        ← first ISSUE block
+#         comment_1/      ← first COMMENT block
+#         trinity_1/      ← first TRINITY block
+#
+# EACH TEST
+#   1. Writes a fixture to a temp input file.
+#   2. Calls parse_blocks.zsh with that file as input.
+#   3. Asserts expected output files exist with expected content.
+# =============================================================================
+
+@setup {
+    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    scaffold_setUp
+
+    # Use a per-process temp directory so parallel test runs don't collide.
+    # $$ is the current process ID — guaranteed unique per run.
+    export TOS_PARSE_OUTPUT_DIR="/tmp/tos_parse_test_$$"
+    mkdir -p "${TOS_PARSE_OUTPUT_DIR}"
+
+    # Convenience: path to the fixtures directory.
+    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+}
+
+@teardown {
+    scaffold_tearDown
+    rm -rf "${TOS_PARSE_OUTPUT_DIR}" 2>/dev/null
+}
+
+# Helper: run the parser against a fixture file and capture output.
+# Usage: _run_parser <fixture_filename>
+# Sets global _parser_output and _parser_exit.
+function _run_parser() {
+    local fixture="$1"
+    _parser_output=$(zsh bin/utils/parse_blocks.zsh \
+        "${_FIXTURES}/${fixture}" \
+        "${TOS_PARSE_OUTPUT_DIR}" 2>&1)
+    _parser_exit=$?
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — META block: all key-value fields extracted to individual files
+# ---------------------------------------------------------------------------
+@test "META block: all key-value fields extracted to individual files" {
+    _run_parser "valid_meta.md"
+
+    assert equal "${_parser_exit}" "0"
+
+    # The parser should create a subdirectory "1" for the first META block.
+    local base="${TOS_PARSE_OUTPUT_DIR}/1"
+    assert_dir_exists "${base}"
+
+    assert_file_equals "${base}/TARGET_PROJECT.txt" "test-project"
+    assert_file_equals "${base}/TARGET_TRINITY.txt" "1"
+    assert_file_equals "${base}/TITLE.txt"          "Test commit title"
+    assert_file_equals "${base}/BODY.txt"           "Test commit body."
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — FILE block: raw body and target path extracted correctly
+# ---------------------------------------------------------------------------
+@test "FILE block: raw body and target path extracted correctly" {
+    _run_parser "valid_file_single.md"
+
+    assert equal "${_parser_exit}" "0"
+
+    local base="${TOS_PARSE_OUTPUT_DIR}/file_1"
+    assert_dir_exists "${base}"
+
+    # _TARGET.txt holds the filename that appeared after "TOS_FILE_START: "
+    assert_file_equals "${base}/_TARGET.txt" "calculator.zsh"
+
+    # RAW_BODY.txt holds everything between the START and END markers verbatim.
+    assert_file_exists "${base}/RAW_BODY.txt"
+    assert_file_contains "${base}/RAW_BODY.txt" "#!/bin/zsh"
+    assert_file_contains "${base}/RAW_BODY.txt" "add()"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Multiple FILE blocks produce separate numbered subdirectories
+# ---------------------------------------------------------------------------
+@test "Multiple FILE blocks produce separate numbered subdirectories" {
+    _run_parser "valid_file_double.md"
+
+    assert equal "${_parser_exit}" "0"
+
+    assert_file_equals "${TOS_PARSE_OUTPUT_DIR}/file_1/_TARGET.txt" "calculator.zsh"
+    assert_file_equals "${TOS_PARSE_OUTPUT_DIR}/file_2/_TARGET.txt" "test_calculator.zsh"
+
+    assert_file_nonempty "${TOS_PARSE_OUTPUT_DIR}/file_1/RAW_BODY.txt"
+    assert_file_nonempty "${TOS_PARSE_OUTPUT_DIR}/file_2/RAW_BODY.txt"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 4 — FILE block missing path marker causes loud error and non-zero exit
+# ---------------------------------------------------------------------------
+# A FILE block like "===TOS_FILE_START===" (no ": path" suffix) is malformed.
+# The parser must abort with a non-zero exit and emit an error referencing the
+# missing path, not silently produce a file with an empty _TARGET.txt.
+@test "FILE block missing path marker causes loud error and non-zero exit" {
+    _run_parser "file_missing_path.md"
+
+    assert not_equal "${_parser_exit}" "0"
+
+    # Error message must reference "path" or "target".
+    echo "${_parser_output}" | grep -qi "path\|target"
+    assert equal "$?" "0"
+
+    # No _TARGET.txt file should have been created (no partial output).
+    assert_file_not_exists "${TOS_PARSE_OUTPUT_DIR}/file_1/_TARGET.txt"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 5 — PLAN block: APPROVED_FILES extracted correctly
+# ---------------------------------------------------------------------------
+@test "PLAN block: APPROVED_FILES extracted correctly" {
+    _run_parser "valid_plan.md"
+
+    assert equal "${_parser_exit}" "0"
+
+    local base="${TOS_PARSE_OUTPUT_DIR}/plan_1"
+    assert_dir_exists "${base}"
+    assert_file_equals "${base}/APPROVED_FILES.txt" "calculator.zsh test_calculator.zsh"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 6 — ISSUE block: TITLE and BODY extracted
+# ---------------------------------------------------------------------------
+@test "ISSUE block: TITLE and BODY extracted correctly" {
+    _run_parser "valid_issue.md"
+
+    assert equal "${_parser_exit}" "0"
+
+    local base="${TOS_PARSE_OUTPUT_DIR}/issue_1"
+    assert_dir_exists "${base}"
+    assert_file_contains "${base}/TITLE.txt" "Implement subtract() function"
+    assert_file_nonempty "${base}/BODY.txt"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 7 — COMMENT block: TARGET and BODY extracted
+# ---------------------------------------------------------------------------
+@test "COMMENT block: TARGET and BODY extracted correctly" {
+    _run_parser "valid_comment.md"
+
+    assert equal "${_parser_exit}" "0"
+
+    local base="${TOS_PARSE_OUTPUT_DIR}/comment_1"
+    assert_dir_exists "${base}"
+    assert_file_equals "${base}/TARGET.txt" "1"
+    assert_file_contains "${base}/BODY.txt" "ANSWER"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 8 — TRINITY block: TARGET_PROJECT, TARGET_TRINITY, MANIFEST extracted
+# ---------------------------------------------------------------------------
+@test "TRINITY block: all fields extracted correctly" {
+    _run_parser "valid_trinity_close.md"
+
+    assert equal "${_parser_exit}" "0"
+
+    local base="${TOS_PARSE_OUTPUT_DIR}/trinity_1"
+    assert_dir_exists "${base}"
+    assert_file_equals "${base}/TARGET_PROJECT.txt" "test-project"
+    assert_file_equals "${base}/TARGET_TRINITY.txt" "1"
+    assert_file_equals "${base}/MANIFEST.txt"       "calculator.zsh test_calculator.zsh"
+}

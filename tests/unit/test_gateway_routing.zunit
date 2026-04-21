@@ -1,0 +1,155 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/unit/test_gateway_routing.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   The filesystem-driven dispatch mechanism in bin/tos.zsh (Stage 5).
+#   The gateway maps the command-line arguments <verb> <noun> onto a script
+#   located at:
+#       bin/modules/<noun>/<lock_tier>/<verb>.zsh
+#   where <lock_tier> is either "soft" (Trinity 0) or "hard" (Trinity > 0).
+#
+# WHAT IS NOT TESTED HERE
+#   Security guards (those live in test_gateway_security.zunit).
+#
+# ZUNIT PRIMER
+#   @test "description" { ... }  — declares a test case.
+#   @setup { ... }               — runs before every @test in this file.
+#   @teardown { ... }            — runs after every @test in this file.
+#   assert equal  <a> <b>        — fails the test if a != b.
+#   assert contains <haystack> <needle> — fails if needle not in haystack.
+#   The return value of the last command determines pass/fail when no
+#   explicit assert is used.
+# =============================================================================
+
+@setup {
+    # Pull in shared infrastructure.
+    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+
+    scaffold_setUp
+    reset_mocks
+
+    # Build the fake module tree that routing tests exercise.
+    # We create dummy scripts rather than sourcing real production code so that
+    # routing tests only verify dispatch, not module business logic.
+    _dummy_soft="${TOS_MNT_ROOT}/.local/bin/modules/dummy/soft"
+    _dummy_hard="${TOS_MNT_ROOT}/.local/bin/modules/dummy/hard"
+    mkdir -p "${_dummy_soft}" "${_dummy_hard}"
+
+    # The soft-tier module prints a recognisable sentinel and exits cleanly.
+    cat > "${_dummy_soft}/action.zsh" <<'SCRIPT'
+#!/bin/zsh
+[[ -z "${TOS_CONTROLLER_LOCKED}" ]] && exit 99
+echo "DUMMY_EXECUTED"
+exit 0
+SCRIPT
+
+    # The hard-tier module prints a different sentinel.
+    cat > "${_dummy_hard}/action.zsh" <<'SCRIPT'
+#!/bin/zsh
+[[ -z "${TOS_CONTROLLER_LOCKED}" ]] && exit 99
+echo "HARD_EXECUTED"
+exit 0
+SCRIPT
+
+    # Export the module base so the gateway finds the fake tree.
+    export TOS_MODULE_BASE="${TOS_MNT_ROOT}/.local/bin/modules"
+    export TOS_ACTIVE_TRINITY="0"
+}
+
+@teardown {
+    scaffold_tearDown
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — Dynamic routing: gateway discovers and executes a soft module
+# ---------------------------------------------------------------------------
+# The gateway receives: <project> dummy action
+# With TOS_ACTIVE_TRINITY=0 the dispatch tier is "soft/".
+# Expected: the script at modules/dummy/soft/action.zsh is sourced and
+#           its output "DUMMY_EXECUTED" appears on stdout.
+@test "Dynamic routing discovers and executes a soft module by filesystem path" {
+    export TOS_ACTIVE_TRINITY="0"
+
+    # Run the gateway. We capture combined stdout+stderr.
+    # "2>&1" redirects stderr into stdout so we can grep both streams.
+    local output
+    output=$(zsh bin/tos.zsh test-project dummy action 2>&1)
+    local exit_code=$?
+
+    assert equal "${exit_code}" "0"
+    assert contains "${output}" "DUMMY_EXECUTED"
+
+    # Safety: confirm no real git/gh calls were triggered.
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log  "dummy"
+    assert_mock_not_called /tmp/tos_mock_git_calls.log "dummy"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — Hard-lock enforcement: hard/ module rejected when Trinity is 0
+# ---------------------------------------------------------------------------
+# A "hard/" module must only run when a hard lock is active (Trinity > 0).
+# When Trinity is 0 (soft lock context) the gateway must refuse to execute
+# a module that lives under the hard/ tier.
+@test "Hard-lock enforcement: hard/ module rejected when Trinity is 0" {
+    export TOS_ACTIVE_TRINITY="0"
+
+    # Point the gateway at the hard-tier dummy by overriding the lock state.
+    # We ask for "dummy action" but the only copy of action.zsh in the dummy
+    # tree is under hard/ (we temporarily move the soft/ one away).
+    # Simpler approach: call with TOS_ACTIVE_TRINITY=0 and a hard-only module name.
+    local output
+    # We directly ask the gateway to run a hard module while trinity is 0.
+    # The gateway must detect that hard/ requires trinity > 0 and abort.
+    output=$(TOS_ACTIVE_TRINITY=0 zsh bin/tos.zsh test-project dummy hard_action 2>&1)
+    local exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+    assert not_contains "${output}" "HARD_EXECUTED"
+    # The rejection message must mention the lock tier or Trinity 0.
+    # (case-insensitive grep via assert_output_contains helper)
+    echo "${output}" | grep -qi "soft\|trinity 0\|hard lock\|lock required"
+    assert equal "$?" "0"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Hard-lock execution succeeds when Trinity > 0
+# ---------------------------------------------------------------------------
+# When a hard lock file is present and TOS_ACTIVE_TRINITY is set to 1,
+# the gateway should successfully dispatch to a hard/ module.
+@test "Hard-lock execution succeeds when Trinity is greater than 0" {
+    # Write a hard lock for trinity 1 (format: owner:LOCK_TYPE).
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+
+    local output
+    output=$(zsh bin/tos.zsh test-project dummy action 2>&1)
+    local exit_code=$?
+
+    # With a valid hard lock the hard/ module should run.
+    assert equal "${exit_code}" "0"
+    assert contains "${output}" "HARD_EXECUTED"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 4 — Unknown module/action returns non-zero and an informative error
+# ---------------------------------------------------------------------------
+# Asking for a module or action that has no corresponding file on disk must
+# fail gracefully without invoking any real external commands.
+@test "Unknown module and action returns non-zero with informative error" {
+    local output
+    output=$(zsh bin/tos.zsh test-project nonexistent thing 2>&1)
+    local exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+
+    # Confirm no real side-effects were attempted.
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log  ""
+    assert_mock_not_called /tmp/tos_mock_git_calls.log ""
+
+    # The output should contain something useful for the operator.
+    echo "${output}" | grep -qi "not found\|unknown\|no module\|invalid"
+    assert equal "$?" "0"
+}

@@ -1,0 +1,72 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/unit/test_lock_verify.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   bin/utils/lock/verify.zsh — asserts that a specific architect holds a
+#   specific lock type on a specific project/trinity slot. Used by modules
+#   (e.g. write code, write trinity) as a pre-flight check before executing
+#   any side effects.
+#
+# INVOCATION CONVENTION (assumed)
+#   verify.zsh <project> <trinity_number> <architect_username> <expected_lock_type>
+#   e.g.  verify.zsh test-project 1 test_architect HARD_LOCK
+#
+# Returns 0 if all conditions match, non-zero otherwise.
+# =============================================================================
+
+@setup {
+    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    scaffold_setUp
+}
+
+@teardown {
+    scaffold_tearDown
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — Verify confirms a valid lock owned by this architect
+# ---------------------------------------------------------------------------
+@test "Verify confirms a valid HARD_LOCK owned by the calling architect" {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+
+    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
+    assert equal "$?" "0"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — Verify fails when lock is owned by a different architect
+# ---------------------------------------------------------------------------
+@test "Verify fails when lock is owned by a different architect" {
+    echo "architect_b:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+
+    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
+    assert not_equal "$?" "0"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Verify fails when lock type does not match
+# ---------------------------------------------------------------------------
+# The lock exists and the architect matches, but they hold SOFT_LOCK while
+# the caller requires HARD_LOCK. This protects hard/ modules from running
+# in a soft-lock context.
+@test "Verify fails when lock type does not match expected" {
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+
+    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
+    assert not_equal "$?" "0"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 4 — Verify fails when no lock file exists
+# ---------------------------------------------------------------------------
+# If there is no lock file at all, verification must fail. There is no lock
+# to verify against.
+@test "Verify fails when no lock file exists for the given slot" {
+    # Ensure clean state — no lock file.
+    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.lock"
+
+    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
+    assert not_equal "$?" "0"
+}

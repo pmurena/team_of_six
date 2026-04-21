@@ -1,0 +1,78 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/unit/test_lock_status.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   bin/utils/lock/status.zsh — reports which trinity (if any) the given
+#   architect currently holds a lock on for the given project.
+#
+# INVOCATION CONVENTION (assumed)
+#   status.zsh <project> <architect_username>
+#
+# Expected output examples:
+#   "HARD_LOCK on trinity 3"   (hard lock active)
+#   "SOFT_LOCK on trinity 0"   (project synced, no work in progress)
+#   "no active lock"           (completely unlocked)
+# =============================================================================
+
+@setup {
+    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    scaffold_setUp
+}
+
+@teardown {
+    scaffold_tearDown
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — Status reports correct trinity when hard lock is active
+# ---------------------------------------------------------------------------
+@test "Status reports trinity number and HARD_LOCK when hard lock is active" {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_3.lock"
+
+    local output
+    output=$(zsh bin/utils/lock/status.zsh "test-project" "test_architect" 2>&1)
+
+    # Output must contain the trinity number 3 and reference HARD_LOCK.
+    echo "${output}" | grep -q "3"
+    assert equal "$?" "0"
+    echo "${output}" | grep -qi "HARD_LOCK\|hard"
+    assert equal "$?" "0"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — Status reports Trinity 0 when only soft lock is active
+# ---------------------------------------------------------------------------
+@test "Status reports Trinity 0 and SOFT_LOCK when only soft lock is active" {
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
+
+    local output
+    output=$(zsh bin/utils/lock/status.zsh "test-project" "test_architect" 2>&1)
+
+    echo "${output}" | grep -q "0"
+    assert equal "$?" "0"
+    echo "${output}" | grep -qi "SOFT_LOCK\|soft"
+    assert equal "$?" "0"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Status reports no lock when no lock files exist
+# ---------------------------------------------------------------------------
+@test "Status reports no active lock when no lock files exist" {
+    # Confirm clean state.
+    local lock_count
+    lock_count=$(find "${TOS_LOCKS}" -name "test-project_trinity_*.lock" | wc -l)
+    assert equal "${lock_count}" "0"
+
+    local output exit_code
+    output=$(zsh bin/utils/lock/status.zsh "test-project" "test_architect" 2>&1)
+    exit_code=$?
+
+    # Must exit cleanly — "no lock" is not an error condition.
+    assert equal "${exit_code}" "0"
+
+    # Output must indicate absence of a lock.
+    echo "${output}" | grep -qi "no.*lock\|unlocked\|none\|inactive"
+    assert equal "$?" "0"
+}

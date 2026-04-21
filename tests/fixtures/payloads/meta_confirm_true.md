@@ -1,0 +1,7 @@
+===TOS_META_START===
+TARGET_PROJECT=test-project
+TARGET_TRINITY=1
+TITLE=Close trinity 1
+BODY=All tests pass.
+CONFIRM=TRUE
+===TOS_META_END===

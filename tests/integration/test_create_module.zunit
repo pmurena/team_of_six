@@ -1,0 +1,158 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/integration/test_create_module.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   The Inception module — three commands that bring a project into existence:
+#     `create project`  → git init + gh repo create
+#     `create issue`    → gh issue create (one or more issues in batch)
+#     `create trinity`  → git branch + gh pr create --draft
+#
+# COMPONENTS UNDER TEST
+#   bin/modules/create/soft/project.zsh
+#   bin/modules/create/soft/issue.zsh
+#   bin/modules/create/soft/trinity.zsh
+#
+# INTEGRATION TEST CHARACTERISTICS
+#   - Both scaffold.zsh AND mocks.zsh are sourced (unlike unit tests which may
+#     source only one or the other).
+#   - The gateway is invoked as a whole process (`zsh bin/tos.zsh ...`).
+#   - `gh` and `git` are intercepted via function mocks; no real network calls.
+#   - Assertions inspect: mock call logs, inbox size, exit codes, and files.
+# =============================================================================
+
+@setup {
+    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
+    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    scaffold_setUp
+    reset_mocks
+
+    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    # All create/* modules require only a SOFT_LOCK (trinity 0).
+    export TOS_ACTIVE_TRINITY="0"
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
+}
+
+@teardown {
+    scaffold_tearDown
+}
+
+# ===========================================================================
+# create project
+# ===========================================================================
+
+@test "[create project — positive] Valid META payload creates GitHub repo" {
+    # Write a META payload into the inbox describing the new project.
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=test-project
+TITLE=test-project
+BODY=A test repo.
+===TOS_META_END===
+PAYLOAD
+
+    local output exit_code
+    output=$(zsh bin/tos.zsh test-project create project 2>&1)
+    exit_code=$?
+
+    assert equal "${exit_code}" "0"
+
+    # git must have been called with "init" to initialise a local repository.
+    assert_mock_called /tmp/tos_mock_git_calls.log "init"
+
+    # gh must have been called with "repo create" to push the repo to GitHub.
+    assert_mock_called /tmp/tos_mock_gh_calls.log "repo create"
+
+    # ADR 10 — Inbox Truncation Invariant: inbox must be empty after execution.
+    assert_file_empty "${TOS_INBOX}"
+}
+
+@test "[create project — negative] Missing TARGET_PROJECT causes graceful abort" {
+    # A META block without TARGET_PROJECT is malformed.
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TITLE=no-project-field
+BODY=This is missing TARGET_PROJECT.
+===TOS_META_END===
+PAYLOAD
+
+    local exit_code
+    zsh bin/tos.zsh test-project create project 2>&1
+    exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+
+    # No git or gh calls should have been attempted.
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log  "repo create"
+    assert_mock_not_called /tmp/tos_mock_git_calls.log "init"
+}
+
+# ===========================================================================
+# create issue
+# ===========================================================================
+
+@test "[create issue — positive] ISSUE block triggers gh issue create" {
+    scaffold_write_inbox "${_FIXTURES}/valid_issue.md"
+
+    # Simulate gh returning a JSON issue number (as the real CLI does).
+    export TOS_MOCK_GH_OUTPUT='{"number":2}'
+
+    local output exit_code
+    output=$(zsh bin/tos.zsh test-project create issue 2>&1)
+    exit_code=$?
+
+    assert equal "${exit_code}" "0"
+    assert_mock_called /tmp/tos_mock_gh_calls.log "issue create"
+    assert_mock_called /tmp/tos_mock_gh_calls.log "--title"
+    assert_mock_called /tmp/tos_mock_gh_calls.log "Implement subtract"
+    assert_file_empty "${TOS_INBOX}"
+}
+
+@test "[create issue — negative] ISSUE block without TITLE causes abort" {
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_ISSUE_START===
+BODY=No title provided here.
+===TOS_ISSUE_END===
+PAYLOAD
+
+    zsh bin/tos.zsh test-project create issue 2>&1
+    local exit_code=$?
+
+    assert not_equal "${exit_code}" "0"
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log "issue create"
+}
+
+# ===========================================================================
+# create trinity
+# ===========================================================================
+
+@test "[create trinity — positive] Creates branch and Draft PR linked to issue" {
+    # The trinity number is supplied as a positional argument to the gateway.
+    # The module must:
+    #   1. Create (or checkout) a branch named tos-work-<N>.
+    #   2. Open a Draft PR on GitHub linked to issue #N.
+
+    export TOS_MOCK_GH_OUTPUT='{"number":1,"url":"https://github.com/org/test-project/pull/1"}'
+
+    local output exit_code
+    output=$(zsh bin/tos.zsh test-project create trinity 1 2>&1)
+    exit_code=$?
+
+    assert equal "${exit_code}" "0"
+
+    # git must have created or checked out the work branch.
+    # Accept either "branch tos-work-1" or "checkout -b tos-work-1".
+    local git_log
+    git_log=$(cat /tmp/tos_mock_git_calls.log)
+    echo "${git_log}" | grep -q "tos-work-1"
+    assert equal "$?" "0"
+
+    # gh pr create must have been called with --draft.
+    assert_mock_called /tmp/tos_mock_gh_calls.log "pr create"
+    assert_mock_called /tmp/tos_mock_gh_calls.log "--draft"
+
+    # The PR must reference issue #1.
+    echo "$(cat /tmp/tos_mock_gh_calls.log)" | grep -qE "\-\-issue 1|#1"
+    assert equal "$?" "0"
+}
