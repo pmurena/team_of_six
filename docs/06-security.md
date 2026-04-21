@@ -33,7 +33,7 @@ sudo -n -u team_of_six "$TOS_BIN/tos.zsh" "$@"
 The `-n` flag means non-interactive — if the sudo call requires a password, it fails immediately. TOS operations never require manual password entry. The permission is granted unconditionally to `team_of_six` group members via the sudoers entry installed by `inf/tos_add_user.zsh`:
 
 ```
-%team_of_six ALL=(team_of_six) NOPASSWD: /mnt/team_of_six/.local/bin/tos.zsh
+%team_of_six ALL=(team_of_six) NOPASSWD: ${TOS_MNT_ROOT}/.local/bin/tos.zsh
 ```
 
 This grants group members the ability to run exactly one binary — the TOS gateway — as the Ghost. Nothing else. An Architect cannot use this permission to run arbitrary commands.
@@ -45,7 +45,7 @@ The gateway sets `TOS_CONTROLLER_LOCKED=true` after successful escalation. Every
 ## The Control Plane Layout
 
 ```
-/mnt/team_of_six/                   owned: root:team_of_six        mode: 0750
+${TOS_MNT_ROOT}/                   owned: root:team_of_six        mode: 0750
 ├── .ipc/
 │   ├── locks/                      owned: team_of_six:team_of_six  mode: 0700
 │   │   ├── <project>_trinity_<N>.lock
@@ -153,8 +153,8 @@ This script creates the `team_of_six` system user and group, provisions the cont
 **Step 2 — Install the GitHub token:**
 
 ```zsh
-sudo -u team_of_six tee /mnt/team_of_six/.local/conf/.token <<< "your-token-here"
-sudo chmod 0400 /mnt/team_of_six/.local/conf/.token
+sudo -u team_of_six tee ${TOS_MNT_ROOT}/.local/conf/.token <<< "your-token-here"
+sudo chmod 0400 ${TOS_MNT_ROOT}/.local/conf/.token
 ```
 
 The token must have repository and issue permissions. It must **not** have `delete_repo` scope — that scope is acquired interactively only when needed and revoked immediately after.

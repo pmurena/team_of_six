@@ -27,13 +27,13 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
 
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     echo "calculator.zsh test_calculator.zsh" \
@@ -48,7 +48,7 @@
 # ---------------------------------------------------------------------------
 # TEST 1 — Positive: MANIFEST matches diff → full closure executes
 # ---------------------------------------------------------------------------
-@test "[write trinity — positive] MANIFEST matches diff; full closure sequence executes" {
+@test '[write trinity — positive] MANIFEST matches diff; full closure sequence executes' {
     scaffold_write_inbox "${_FIXTURES}/valid_trinity_close.md"
 
     # Mock `git diff --name-only` to return the same two files listed in the
@@ -65,7 +65,7 @@ test_calculator.zsh"
     zsh bin/tos.zsh test-project write trinity 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     # PR must have been squash-merged.
     assert_mock_called /tmp/tos_mock_gh_calls.log "pr merge --squash"
@@ -77,7 +77,7 @@ test_calculator.zsh"
     local git_log
     git_log=$(cat /tmp/tos_mock_git_calls.log)
     echo "${git_log}" | grep -q "tos-work-1"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 
     # Lock and manifest must be cleaned up.
     assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.lock"
@@ -89,7 +89,7 @@ test_calculator.zsh"
 # ---------------------------------------------------------------------------
 # The git diff returns FEWER files than the TRINITY payload claims.
 # This means the agent hallucinated files that don't exist in the branch.
-@test "[write trinity — negative, MANIFEST mismatch] Triggers CONTEXT HALLUCINATION" {
+@test '[write trinity — negative, MANIFEST mismatch] Triggers CONTEXT HALLUCINATION' {
     # Payload claims both files are present.
     scaffold_write_inbox "${_FIXTURES}/valid_trinity_close.md"
 
@@ -100,7 +100,7 @@ test_calculator.zsh"
     output=$(zsh bin/tos.zsh test-project write trinity 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # PR must NOT have been merged.
     assert_mock_not_called /tmp/tos_mock_gh_calls.log "pr merge"
@@ -110,5 +110,5 @@ test_calculator.zsh"
 
     # Output must use the "CONTEXT HALLUCINATION" terminology from the spec.
     echo "${output}" | grep -qi "CONTEXT HALLUCINATION\|manifest.*mismatch\|mismatch.*manifest"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }

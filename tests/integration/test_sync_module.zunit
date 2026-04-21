@@ -17,13 +17,13 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
     export TOS_ACTIVE_TRINITY="0"
 }
 
@@ -35,7 +35,7 @@
 # sync project
 # ===========================================================================
 
-@test "[sync project — positive] Provisions sandbox, clones repo, acquires SOFT_LOCK" {
+@test '[sync project — positive] Provisions sandbox, clones repo, acquires SOFT_LOCK' {
     # The sandbox directory must NOT exist before this call.
     local sandbox_dir="${TOS_SANDBOX}/test_architect/test-project"
     assert_dir_not_exists "${sandbox_dir}"
@@ -53,7 +53,7 @@
     zsh bin/tos.zsh test-project sync project 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
     assert_mock_called /tmp/tos_mock_git_calls.log "clone"
 
     # A SOFT_LOCK must have been acquired for trinity 0.
@@ -64,7 +64,7 @@
     assert_file_nonempty "${TOS_OUTBOX}"
 }
 
-@test "[sync project — negative] Second call rejected when sandbox already exists" {
+@test '[sync project — negative] Second call rejected when sandbox already exists' {
     # Pre-create the sandbox directory to simulate an already-provisioned state.
     mkdir -p "${TOS_SANDBOX}/test_architect/test-project"
 
@@ -72,10 +72,10 @@
     output=$(zsh bin/tos.zsh test-project sync project 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     echo "${output}" | grep -qi "already exists\|already provisioned\|duplicate"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 
     # No additional git clone must have been attempted.
     assert_mock_not_called /tmp/tos_mock_git_calls.log "clone"
@@ -85,7 +85,7 @@
 # sync trinity (Atomic Handover)
 # ===========================================================================
 
-@test "[sync trinity — positive] Atomic Handover: push → release old lock → acquire new → snapshot" {
+@test '[sync trinity — positive] Atomic Handover: push → release old lock → acquire new → snapshot' {
     # Set up the pre-condition: architect holds a HARD_LOCK on trinity 1,
     # currently working on branch tos-work-1.
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
@@ -98,7 +98,7 @@
     zsh bin/tos.zsh test-project sync trinity 2 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     # git push must appear in the log (pushing prior work before locking changes).
     assert_mock_called /tmp/tos_mock_git_calls.log "push"
@@ -114,14 +114,14 @@
     local git_log
     git_log=$(cat /tmp/tos_mock_git_calls.log)
     echo "${git_log}" | grep -q "tos-work-2"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 
     # Outbox must have been OVERWRITTEN with a fresh snapshot (ADR 3).
     assert_file_nonempty "${TOS_OUTBOX}"
     assert_file_contains  "${TOS_OUTBOX}" "trinity 2\|TARGET_TRINITY=2"
 }
 
-@test "[sync trinity — negative] Push failure halts with no self-healing (ADR 11)" {
+@test '[sync trinity — negative] Push failure halts with no self-healing (ADR 11)' {
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
     mkdir -p "${TOS_SANDBOX}/test_architect/test-project"
@@ -133,7 +133,7 @@
     output=$(zsh bin/tos.zsh test-project sync trinity 2 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # The outbox must contain the error (Architect needs to see it).
     assert_file_nonempty "${TOS_OUTBOX}"
@@ -154,7 +154,7 @@
 # sync peek
 # ===========================================================================
 
-@test "[sync peek — positive] File content appended to outbox without snapshot reset" {
+@test '[sync peek — positive] File content appended to outbox without snapshot reset' {
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
 
@@ -171,7 +171,7 @@
     zsh bin/tos.zsh test-project sync peek calculator.zsh 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     # Existing snapshot must still be present (not wiped).
     assert_file_contains "${TOS_OUTBOX}" "EXISTING_SNAPSHOT_CONTENT"
@@ -180,7 +180,7 @@
     assert_file_contains "${TOS_OUTBOX}" "add()"
 }
 
-@test "[sync peek — negative] Non-existent file causes graceful error" {
+@test '[sync peek — negative] Non-existent file causes graceful error' {
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
 
@@ -188,7 +188,7 @@
     output=$(zsh bin/tos.zsh test-project sync peek does_not_exist.zsh 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
     echo "${output}" | grep -qi "not found\|no such file\|missing"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }

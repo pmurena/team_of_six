@@ -34,7 +34,7 @@ The lock hierarchy is the mechanical enforcement of the Trinity mandate. It has 
 
 **Hard Lock (Trinity N)** — acquired when the Architect transitions to an active feature trinity. Under a hard lock, the Ghost has full write access to the `tos-work-N` branch: it can commit files, update the PR, and post review comments. The hard lock is exclusive per trinity: only one Architect can hold a hard lock on a given trinity at a time. Different Architects can hold hard locks on different trinities simultaneously.
 
-The lock files live in `/mnt/team_of_six/.ipc/locks/` and take the form `<project>_trinity_<N>.lock`. The content of each file is `<SUDO_USER>:<LOCK_TYPE>`, for example `pat:HARD_LOCK`. This format makes it possible to determine at a glance who holds what lock on which project without any tooling beyond `cat`.
+The lock files live in `${TOS_MNT_ROOT}/.ipc/locks/` and take the form `<project>_trinity_<N>.lock`. The content of each file is `<SUDO_USER>:<LOCK_TYPE>`, for example `pat:HARD_LOCK`. This format makes it possible to determine at a glance who holds what lock on which project without any tooling beyond `cat`.
 
 ---
 

@@ -1,3 +1,4 @@
+cat << 'EOF' > tests/helpers/scaffold.zsh
 #!/usr/bin/env zsh
 
 # Define these globally so they are available to the test runner process
@@ -49,3 +50,24 @@ function scaffold_tearDown() {
 function scaffold_write_inbox() {
     cp "$1" "${TOS_INBOX}"
 }
+EOF
+
+
+# Fix Order and spelling for 'equal'
+find tests -type f -name "*.zunit" -exec sed -i "s/assert equal \"\(.*\)\" \"\(.*\)\"/assert \"\1\" equal \"\2\"/g" {} +
+find tests -type f -name "*.zunit" -exec sed -i "s/assert equals \"\(.*\)\" \"\(.*\)\"/assert \"\1\" equal \"\2\"/g" {} +
+
+# Fix Order and spelling for 'not_equal'
+find tests -type f -name "*.zunit" -exec sed -i "s/assert not_equal \"\(.*\)\" \"\(.*\)\"/assert \"\1\" not_equal \"\2\"/g" {} +
+find tests -type f -name "*.zunit" -exec sed -i "s/assert not_equals \"\(.*\)\" \"\(.*\)\"/assert \"\1\" not_equal \"\2\"/g" {} +
+mkdir -p tests/helpers/bin
+cat << 'EOF' > tests/helpers/bin/sudo
+#!/usr/bin/env zsh
+# Mock sudo: strips flags if present, otherwise just executes
+while [[ "$1" == -* ]]; do
+    if [[ "$1" == "-u" ]]; then shift 2; else shift 1; fi
+done
+exec "$@"
+EOF
+chmod +x tests/helpers/bin/sudo
+

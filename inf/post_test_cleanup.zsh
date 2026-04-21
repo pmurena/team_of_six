@@ -9,7 +9,7 @@ if ! gh auth status -s delete_repo >/dev/null 2>&1; then
 fi
 
 GIT_USER=$(gh api user -q .login)
-SANDBOX_ROOT="/mnt/team_of_six/sandbox/$USER"
+SANDBOX_ROOT="${TOS_MNT_ROOT}/sandbox/$USER"
 
 for repo in tos-trinity-test-*; do
     if [ -d "$repo" ]; then

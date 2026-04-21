@@ -19,13 +19,13 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
 
     # write plan requires a HARD_LOCK.
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
@@ -39,14 +39,14 @@
 # ---------------------------------------------------------------------------
 # TEST 1 — Positive: PLAN block writes .manifest visa
 # ---------------------------------------------------------------------------
-@test "[write plan — positive] PLAN block creates manifest visa in lock directory" {
+@test '[write plan — positive] PLAN block creates manifest visa in lock directory' {
     scaffold_write_inbox "${_FIXTURES}/valid_plan.md"
 
     local exit_code
     zsh bin/tos.zsh test-project write plan 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     local manifest="${TOS_LOCKS}/test-project_trinity_1.manifest"
     assert_file_exists "${manifest}"
@@ -60,7 +60,7 @@
 # ---------------------------------------------------------------------------
 # TEST 2 — Negative: Missing APPROVED_FILES causes abort
 # ---------------------------------------------------------------------------
-@test "[write plan — negative] PLAN block without APPROVED_FILES causes abort" {
+@test '[write plan — negative] PLAN block without APPROVED_FILES causes abort' {
     # Write a PLAN block that has no APPROVED_FILES field.
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_PLAN_START===
@@ -72,7 +72,7 @@ PAYLOAD
     zsh bin/tos.zsh test-project write plan 2>&1
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # No manifest file should have been created.
     assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.manifest"
@@ -83,7 +83,7 @@ PAYLOAD
 # ---------------------------------------------------------------------------
 # The Architect may change their mind about which files are needed. A second
 # `write plan` must replace the visa entirely — the old list must be gone.
-@test "[write plan — overwrite] Re-issuing write plan replaces previous manifest" {
+@test '[write plan — overwrite] Re-issuing write plan replaces previous manifest' {
     # Seed an existing manifest with a different (old) file list.
     echo "old_file.zsh" > "${TOS_LOCKS}/test-project_trinity_1.manifest"
 

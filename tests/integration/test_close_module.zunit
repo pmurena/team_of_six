@@ -24,13 +24,13 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
 
     # Shared sandbox directory used by close project tests.
     _SANDBOX_PROJECT="${TOS_SANDBOX}/test_architect/test-project"
@@ -45,7 +45,7 @@
 # close trinity
 # ===========================================================================
 
-@test "[close trinity — positive] Squash merges PR, cleans branch and lock" {
+@test '[close trinity — positive] Squash merges PR, cleans branch and lock' {
     # close trinity is a hard/ module — requires active HARD_LOCK.
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     echo "calculator.zsh"           > "${TOS_LOCKS}/test-project_trinity_1.manifest"
@@ -59,7 +59,7 @@
     zsh bin/tos.zsh test-project close trinity 1 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     assert_mock_called /tmp/tos_mock_gh_calls.log "pr merge --squash"
 
@@ -71,13 +71,13 @@
     local git_log
     git_log=$(cat /tmp/tos_mock_git_calls.log)
     echo "${git_log}" | grep -q "main\|origin/main"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 
     assert_file_empty "${TOS_INBOX}"
 }
 
 # HITL gate — close trinity without CONFIRM=TRUE
-@test "[close trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately" {
+@test '[close trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
 
@@ -95,7 +95,7 @@ PAYLOAD
     output=$(zsh bin/tos.zsh test-project close trinity 1 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # No gh or git calls at all.
     assert_mock_not_called /tmp/tos_mock_gh_calls.log  "pr merge"
@@ -103,14 +103,14 @@ PAYLOAD
 
     # Output must warn about missing CONFIRM.
     echo "${output}" | grep -qi "CONFIRM\|confirmation required\|safety"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # ===========================================================================
 # close project
 # ===========================================================================
 
-@test "[close project — positive] Removes sandbox directory; leaves GitHub remote intact" {
+@test '[close project — positive] Removes sandbox directory; leaves GitHub remote intact' {
     # close project is a soft/ module — SOFT_LOCK only; no hard lock.
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
@@ -121,7 +121,7 @@ PAYLOAD
     zsh bin/tos.zsh test-project close project 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     # Sandbox directory must be gone.
     assert_dir_not_exists "${_SANDBOX_PROJECT}"
@@ -130,7 +130,7 @@ PAYLOAD
     assert_mock_not_called /tmp/tos_mock_gh_calls.log "repo delete"
 }
 
-@test "[close project — negative] Hard lock still active blocks close project" {
+@test '[close project — negative] Hard lock still active blocks close project' {
     # A hard lock means work is in progress — unsafe to tear down the sandbox.
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
@@ -141,17 +141,17 @@ PAYLOAD
     output=$(zsh bin/tos.zsh test-project close project 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # Sandbox must still exist.
     assert_dir_exists "${_SANDBOX_PROJECT}"
 
     echo "${output}" | grep -qi "hard lock\|active lock\|trinity.*active\|work in progress"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # HITL gate — close project without CONFIRM=TRUE
-@test "[close project — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately" {
+@test '[close project — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
 
@@ -168,14 +168,14 @@ PAYLOAD
     output=$(zsh bin/tos.zsh test-project close project 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
     assert_dir_exists "${_SANDBOX_PROJECT}"
     echo "${output}" | grep -qi "CONFIRM"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # HITL gate — delete trinity without CONFIRM=TRUE (per Section 6.9)
-@test "[delete trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately" {
+@test '[delete trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
 
@@ -192,8 +192,8 @@ PAYLOAD
     output=$(zsh bin/tos.zsh test-project delete trinity 1 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
     assert_mock_not_called /tmp/tos_mock_gh_calls.log "pr merge"
     echo "${output}" | grep -qi "CONFIRM"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }

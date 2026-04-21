@@ -19,13 +19,13 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
 
     # Hard lock + manifest visa for the standard test scenario.
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
@@ -45,14 +45,14 @@
 # ---------------------------------------------------------------------------
 # TEST 1 — Positive: single file written, committed, pushed
 # ---------------------------------------------------------------------------
-@test "[write code — positive] Single file written to sandbox, committed, pushed" {
+@test '[write code — positive] Single file written to sandbox, committed, pushed' {
     scaffold_write_inbox "${_FIXTURES}/valid_file_single.md"
 
     local output exit_code
     output=$(zsh bin/tos.zsh test-project write code 2>&1)
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     # The file must exist in the sandbox with the correct content.
     assert_file_exists   "${_SANDBOX_PROJECT}/calculator.zsh"
@@ -76,7 +76,7 @@
 # ---------------------------------------------------------------------------
 # Two FILE blocks → two files written → exactly ONE git commit, not two.
 # This is the "atomic commit" guarantee: the Architect sees one coherent change.
-@test "[write code — positive, multi-file] Both files written with exactly one commit" {
+@test '[write code — positive, multi-file] Both files written with exactly one commit' {
     echo "calculator.zsh test_calculator.zsh" \
         > "${TOS_LOCKS}/test-project_trinity_1.manifest"
 
@@ -86,7 +86,7 @@
     zsh bin/tos.zsh test-project write code 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     assert_file_exists "${_SANDBOX_PROJECT}/calculator.zsh"
     assert_file_exists "${_SANDBOX_PROJECT}/test_calculator.zsh"
@@ -94,7 +94,7 @@
     # Count the number of lines in the git mock log that contain "commit".
     local commit_count
     commit_count=$(grep -c "commit" /tmp/tos_mock_git_calls.log 2>/dev/null || echo 0)
-    assert equal "${commit_count}" "1"
+    assert "${commit_count}" equals "1"
 }
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@
 # ---------------------------------------------------------------------------
 # The payload targets `rogue.zsh` which is not in the manifest. The module
 # must abort before writing anything to disk.
-@test "[write code — negative, SEC-FAULT] File not in manifest causes violent abort" {
+@test '[write code — negative, SEC-FAULT] File not in manifest causes violent abort' {
     # Manifest only authorises calculator.zsh — NOT rogue.zsh.
     echo "calculator.zsh" > "${TOS_LOCKS}/test-project_trinity_1.manifest"
 
@@ -112,7 +112,7 @@
     output=$(zsh bin/tos.zsh test-project write code 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # rogue.zsh must NOT exist in the sandbox.
     assert_file_not_exists "${_SANDBOX_PROJECT}/rogue.zsh"
@@ -122,13 +122,13 @@
 
     # Output must say SEC-FAULT.
     echo "${output}" | grep -qi "SEC-FAULT"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # ---------------------------------------------------------------------------
 # TEST 4 — Negative: path traversal `../../etc/passwd` violently rejected
 # ---------------------------------------------------------------------------
-@test "[write code — negative, path traversal] Traversal path violently rejected" {
+@test '[write code — negative, path traversal] Traversal path violently rejected' {
     # Even if the adversarial path were in the manifest, it must be rejected.
     echo "../../etc/passwd" > "${TOS_LOCKS}/test-project_trinity_1.manifest"
 
@@ -138,12 +138,12 @@
     zsh bin/tos.zsh test-project write code 2>&1
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # The traversal target must not exist anywhere under the sandbox.
     local found
     found=$(find "${TOS_SANDBOX}" -name "passwd" 2>/dev/null | wc -l)
-    assert equal "${found}" "0"
+    assert "${found}" equals "0"
 
     assert_mock_not_called /tmp/tos_mock_git_calls.log "commit"
 }
@@ -153,7 +153,7 @@
 # ---------------------------------------------------------------------------
 # The inbox must be emptied BEFORE `git push` is attempted. Even when push
 # fails the inbox must remain empty — the payload has been consumed.
-@test "[write code — negative, push failure] Inbox truncated before push fails" {
+@test '[write code — negative, push failure] Inbox truncated before push fails' {
     echo "calculator.zsh" > "${TOS_LOCKS}/test-project_trinity_1.manifest"
     scaffold_write_inbox "${_FIXTURES}/valid_file_single.md"
 
@@ -165,7 +165,7 @@
     exit_code=$?
 
     # Overall execution must fail (push failed).
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # But inbox must ALREADY be empty — it was truncated before push.
     assert_file_empty "${TOS_INBOX}"
@@ -173,7 +173,7 @@
     # No second push attempt.
     local push_count
     push_count=$(grep -c "push" /tmp/tos_mock_git_calls.log 2>/dev/null || echo 0)
-    assert equal "${push_count}" "1"
+    assert "${push_count}" equals "1"
 
     # Outbox must contain the push failure output for operator review.
     assert_file_nonempty "${TOS_OUTBOX}"
@@ -182,7 +182,7 @@
 # ---------------------------------------------------------------------------
 # TEST 6 — Negative: no manifest file blocks write code entirely
 # ---------------------------------------------------------------------------
-@test "[write code — negative, no manifest] Blocked when no write plan issued" {
+@test '[write code — negative, no manifest] Blocked when no write plan issued' {
     rm -f "${TOS_LOCKS}/test-project_trinity_1.manifest"
     scaffold_write_inbox "${_FIXTURES}/valid_file_single.md"
 
@@ -190,6 +190,6 @@
     zsh bin/tos.zsh test-project write code 2>&1
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
     assert_file_not_exists "${_SANDBOX_PROJECT}/calculator.zsh"
 }

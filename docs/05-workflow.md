@@ -16,7 +16,7 @@ TOS assumes:
 
 - `inf/tos_deploy.zsh` has been run as root on the machine where the Ghost will operate.
 - Your user account has been added to the `team_of_six` group via `inf/tos_add_user.zsh`. Log out and back in for group membership to take effect.
-- A GitHub personal access token with repository and issue permissions — but **without** `delete_repo` scope — has been placed at `/mnt/team_of_six/.local/conf/.token`.
+- A GitHub personal access token with repository and issue permissions — but **without** `delete_repo` scope — has been placed at `${TOS_MNT_ROOT}/.local/conf/.token`.
 - The `gh` CLI is installed and authenticated.
 
 ---
@@ -49,7 +49,7 @@ The Ghost runs `git init`, `gh repo create`, and establishes the remote reposito
 tos myproject sync start
 ```
 
-This provisions the Ghost's isolated sandbox. It clones the repository from GitHub into `/mnt/team_of_six/sandbox/<your-user>/myproject/`, configures the Ghost's Git identity, and acquires a Trinity 0 soft lock. The sandbox is entirely separate from your own working copy of the repository.
+This provisions the Ghost's isolated sandbox. It clones the repository from GitHub into `${TOS_MNT_ROOT}/sandbox/<your-user>/myproject/`, configures the Ghost's Git identity, and acquires a Trinity 0 soft lock. The sandbox is entirely separate from your own working copy of the repository.
 
 After this command, `tos myproject sync start` will reject if called again — the sandbox already exists.
 

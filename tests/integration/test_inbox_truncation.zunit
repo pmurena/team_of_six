@@ -26,11 +26,11 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
 
     # Hard lock + manifest for write code tests.
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
@@ -52,7 +52,7 @@
 # ---------------------------------------------------------------------------
 # TEST 1 — Inbox is truncated before `git commit` in write code
 # ---------------------------------------------------------------------------
-@test "Inbox truncated before git commit in write code (ADR 10)" {
+@test 'Inbox truncated before git commit in write code (ADR 10)' {
     scaffold_write_inbox "${_FIXTURES}/valid_file_single.md"
 
     # Define a git mock that records the inbox size at commit time.
@@ -93,7 +93,7 @@ WRAPPER
 # ---------------------------------------------------------------------------
 # TEST 2 — Inbox is truncated before `gh issue create` in create issue
 # ---------------------------------------------------------------------------
-@test "Inbox truncated before gh issue create in create issue (ADR 10)" {
+@test 'Inbox truncated before gh issue create in create issue (ADR 10)' {
     # Switch to soft lock context for create issue.
     rm -f "${TOS_LOCKS}/test-project_trinity_1.lock"
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
@@ -130,7 +130,7 @@ WRAPPER
 # ---------------------------------------------------------------------------
 # TEST 3 — Inbox is truncated before `gh pr merge` in close trinity
 # ---------------------------------------------------------------------------
-@test "Inbox truncated before gh pr merge in close trinity (ADR 10)" {
+@test 'Inbox truncated before gh pr merge in close trinity (ADR 10)' {
     scaffold_write_inbox "${_FIXTURES}/meta_confirm_true.md"
 
     local wrapper

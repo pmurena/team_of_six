@@ -24,10 +24,10 @@ This separation creates a hard trust boundary: the Architect interacts with the 
 
 ## The Control Plane
 
-The control plane lives at `/mnt/team_of_six/` — a dedicated mount point distinct from any individual Architect's home directory. It is shared infrastructure structured to support multiple Architects working simultaneously.
+The control plane lives at `${TOS_MNT_ROOT}/` — a dedicated mount point distinct from any individual Architect's home directory. It is shared infrastructure structured to support multiple Architects working simultaneously.
 
 ```
-/mnt/team_of_six/
+${TOS_MNT_ROOT}/
 ├── .ipc/
 │   ├── locks/                    # Lock files AND .manifest visas (mode 0700, Ghost-exclusive)
 │   │   ├── <project>_trinity_<N>.lock

@@ -50,7 +50,7 @@ The Agent is the "Reasoning Engine." It is brilliant but inherently ungrounded. 
 **Identity:** The `team_of_six` system user (Linux Sandbox).
 **The Guardrail:** Physical Isolation.
 
-The Ghost is the "Mechanic." It is a restricted Unix system user account that lives inside an isolated **sandbox** (usually `/mnt/team_of_six/sandbox/`). 
+The Ghost is the "Mechanic." It is a restricted Unix system user account that lives inside an isolated **sandbox** (usually `${TOS_MNT_ROOT}/sandbox/`). 
 
 * **Execution Barrier:** The Ghost is the only actor allowed to perform file mutations. It parses the Agent's text payloads and applies them to the filesystem. Because it lives in a sandbox, it cannot accidentally touch your home directory, your personal SSH keys, or your active working tree.
 * **Automated Mirroring:** The Ghost is the "hands" that talk to the "Remote Truth" (GitHub). It handles the `git clone`, `git branch`, and `git push`. 

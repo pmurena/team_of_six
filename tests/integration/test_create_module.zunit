@@ -22,13 +22,13 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
     # All create/* modules require only a SOFT_LOCK (trinity 0).
     export TOS_ACTIVE_TRINITY="0"
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
@@ -42,7 +42,7 @@
 # create project
 # ===========================================================================
 
-@test "[create project — positive] Valid META payload creates GitHub repo" {
+@test '[create project — positive] Valid META payload creates GitHub repo' {
     # Write a META payload into the inbox describing the new project.
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
@@ -56,7 +56,7 @@ PAYLOAD
     output=$(zsh bin/tos.zsh test-project create project 2>&1)
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     # git must have been called with "init" to initialise a local repository.
     assert_mock_called /tmp/tos_mock_git_calls.log "init"
@@ -68,7 +68,7 @@ PAYLOAD
     assert_file_empty "${TOS_INBOX}"
 }
 
-@test "[create project — negative] Missing TARGET_PROJECT causes graceful abort" {
+@test '[create project — negative] Missing TARGET_PROJECT causes graceful abort' {
     # A META block without TARGET_PROJECT is malformed.
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
@@ -81,7 +81,7 @@ PAYLOAD
     zsh bin/tos.zsh test-project create project 2>&1
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # No git or gh calls should have been attempted.
     assert_mock_not_called /tmp/tos_mock_gh_calls.log  "repo create"
@@ -92,7 +92,7 @@ PAYLOAD
 # create issue
 # ===========================================================================
 
-@test "[create issue — positive] ISSUE block triggers gh issue create" {
+@test '[create issue — positive] ISSUE block triggers gh issue create' {
     scaffold_write_inbox "${_FIXTURES}/valid_issue.md"
 
     # Simulate gh returning a JSON issue number (as the real CLI does).
@@ -102,14 +102,14 @@ PAYLOAD
     output=$(zsh bin/tos.zsh test-project create issue 2>&1)
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
     assert_mock_called /tmp/tos_mock_gh_calls.log "issue create"
     assert_mock_called /tmp/tos_mock_gh_calls.log "--title"
     assert_mock_called /tmp/tos_mock_gh_calls.log "Implement subtract"
     assert_file_empty "${TOS_INBOX}"
 }
 
-@test "[create issue — negative] ISSUE block without TITLE causes abort" {
+@test '[create issue — negative] ISSUE block without TITLE causes abort' {
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_ISSUE_START===
 BODY=No title provided here.
@@ -119,7 +119,7 @@ PAYLOAD
     zsh bin/tos.zsh test-project create issue 2>&1
     local exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
     assert_mock_not_called /tmp/tos_mock_gh_calls.log "issue create"
 }
 
@@ -127,7 +127,7 @@ PAYLOAD
 # create trinity
 # ===========================================================================
 
-@test "[create trinity — positive] Creates branch and Draft PR linked to issue" {
+@test '[create trinity — positive] Creates branch and Draft PR linked to issue' {
     # The trinity number is supplied as a positional argument to the gateway.
     # The module must:
     #   1. Create (or checkout) a branch named tos-work-<N>.
@@ -139,14 +139,14 @@ PAYLOAD
     output=$(zsh bin/tos.zsh test-project create trinity 1 2>&1)
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     # git must have created or checked out the work branch.
     # Accept either "branch tos-work-1" or "checkout -b tos-work-1".
     local git_log
     git_log=$(cat /tmp/tos_mock_git_calls.log)
     echo "${git_log}" | grep -q "tos-work-1"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 
     # gh pr create must have been called with --draft.
     assert_mock_called /tmp/tos_mock_gh_calls.log "pr create"
@@ -154,5 +154,5 @@ PAYLOAD
 
     # The PR must reference issue #1.
     echo "$(cat /tmp/tos_mock_gh_calls.log)" | grep -qE "\-\-issue 1|#1"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }

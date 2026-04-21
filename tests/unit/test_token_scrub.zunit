@@ -27,8 +27,8 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
 
     # Ensure no leftover GH_TOKEN from a previous test.
@@ -45,7 +45,7 @@
 # ---------------------------------------------------------------------------
 # The token file contains "FAKE_GH_TOKEN". A script that mimics the gateway's
 # token-loading step should produce a non-empty GH_TOKEN during execution.
-@test "GH_TOKEN is populated from .token file during gateway execution" {
+@test 'GH_TOKEN is populated from .token file during gateway execution' {
     local token_during_exec
     token_during_exec=$(
         zsh -c '
@@ -56,7 +56,7 @@
         '
     )
 
-    assert equal "${token_during_exec}" "FAKE_GH_TOKEN"
+    assert "${token_during_exec}" equals "FAKE_GH_TOKEN"
 }
 
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@
 # After the subshell terminates, GH_TOKEN must not persist in the parent.
 # We verify the parent shell's perspective: GH_TOKEN was never exported to
 # the parent by the child process.
-@test "GH_TOKEN is not visible in parent environment after gateway clean exit" {
+@test 'GH_TOKEN is not visible in parent environment after gateway clean exit' {
     # Run a complete fake gateway cycle in a subshell.
     (
         export GH_TOKEN="$(cat "${TOS_TOKEN_FILE}")"
@@ -76,7 +76,7 @@
 
     # Parent shell must NOT see GH_TOKEN.
     local parent_value="${GH_TOKEN:-UNSET}"
-    assert equal "${parent_value}" "UNSET"
+    assert "${parent_value}" equals "UNSET"
 }
 
 # ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@
 # ---------------------------------------------------------------------------
 # The EXIT trap must fire even when the gateway exits non-zero. This is the
 # most critical path: an agent crash or SEC-FAULT must still scrub the token.
-@test "GH_TOKEN is not visible in parent environment after gateway error exit" {
+@test 'GH_TOKEN is not visible in parent environment after gateway error exit' {
     (
         export GH_TOKEN="$(cat "${TOS_TOKEN_FILE}")"
         trap "unset GH_TOKEN" EXIT
@@ -93,7 +93,7 @@
     )
 
     local parent_value="${GH_TOKEN:-UNSET}"
-    assert equal "${parent_value}" "UNSET"
+    assert "${parent_value}" equals "UNSET"
 }
 
 # ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@
 # A separate concern: the gateway must not accidentally print the token value
 # in any diagnostic or error message. We inspect the combined output of a
 # failed invocation and confirm the literal token string is absent.
-@test "Gateway output does not contain the literal token value" {
+@test 'Gateway output does not contain the literal token value' {
     local output
     output=$(
         TOS_CONTROLLER_LOCKED=true \
@@ -113,5 +113,5 @@
     echo "${output}" | grep -qF "FAKE_GH_TOKEN"
     local found=$?
     # grep returns 0 if found — we want it NOT found (non-zero).
-    assert equal "${found}" "1"
+    assert "${found}" equals "1"
 }

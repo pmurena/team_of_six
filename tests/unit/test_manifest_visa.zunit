@@ -24,9 +24,10 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "bin/tos.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
@@ -55,24 +56,24 @@ function _check_visa() {
 # ---------------------------------------------------------------------------
 # TEST 1 — File in manifest passes the visa check (exit 0)
 # ---------------------------------------------------------------------------
-@test "File listed in manifest passes the visa check" {
+@test 'File listed in manifest passes the visa check' {
     _check_visa "calculator.zsh"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # ---------------------------------------------------------------------------
 # TEST 2 — File not in manifest causes SEC-FAULT (non-zero exit)
 # ---------------------------------------------------------------------------
-@test "File not in manifest causes SEC-FAULT with descriptive output" {
+@test 'File not in manifest causes SEC-FAULT with descriptive output' {
     local output exit_code
     output=$(_check_visa "rogue.zsh")
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # The output must explicitly say SEC-FAULT or something equally strong.
     echo "${output}" | grep -qi "SEC-FAULT\|manifest.*reject\|not authorised\|not authorized"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # ---------------------------------------------------------------------------
@@ -80,16 +81,16 @@ function _check_visa() {
 # ---------------------------------------------------------------------------
 # This must be caught BEFORE any filesystem read for the traversal path.
 # A ".." component is an unconditional reject — no manifest lookup needed.
-@test "Path traversal with .. is rejected before manifest lookup" {
+@test 'Path traversal with .. is rejected before manifest lookup' {
     local output exit_code
     output=$(_check_visa "../../etc/passwd")
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # Output should indicate a traversal or path rejection.
     echo "${output}" | grep -qi "traversal\|invalid path\|SEC-FAULT\|\.\."
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # ---------------------------------------------------------------------------
@@ -97,9 +98,9 @@ function _check_visa() {
 # ---------------------------------------------------------------------------
 # Absolute paths bypass sandbox confinement. They must be rejected regardless
 # of whether they appear in the manifest.
-@test "Absolute path is rejected by the visa check" {
+@test 'Absolute path is rejected by the visa check' {
     _check_visa "/etc/passwd"
-    assert not_equal "$?" "0"
+    assert "$?" not_equals "0"
 }
 
 # ---------------------------------------------------------------------------
@@ -107,26 +108,26 @@ function _check_visa() {
 # ---------------------------------------------------------------------------
 # If `write plan` has never been run, there is no .manifest file. The gateway
 # must block `write code` entirely rather than operating with no constraints.
-@test "No manifest file present causes write code to be blocked" {
+@test 'No manifest file present causes write code to be blocked' {
     # Remove the manifest that setUp created.
     rm -f "${TOS_LOCKS}/test-project_trinity_1.manifest"
 
     # Seed the inbox with a valid single-file payload.
     scaffold_write_inbox \
-        "${ZUNIT_TEST_DIR}/../fixtures/payloads/valid_file_single.md"
+        "${PWD}/tests/fixtures/payloads/valid_file_single.md"
 
     local output exit_code
     output=$(zsh bin/tos.zsh test-project write code 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # Output must guide the operator towards write plan.
     echo "${output}" | grep -qi "manifest\|write plan\|intent lock"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 
     # No files should have been written to the sandbox.
     local file_count
     file_count=$(find "${TOS_SANDBOX}" -type f 2>/dev/null | wc -l)
-    assert equal "${file_count}" "0"
+    assert "${file_count}" equals "0"
 }

@@ -31,7 +31,7 @@ fi
 export TOS_CONTROLLER_LOCKED=true
 
 # === STAGE 2: CONFIGURATION INJECTION ===
-TOS_GLOBAL_CONF="/mnt/team_of_six/.local/conf/config"
+TOS_GLOBAL_CONF="${TOS_MNT_ROOT}/.local/conf/config"
 if [[ -f "$TOS_GLOBAL_CONF" ]]; then
     source "$TOS_GLOBAL_CONF"
 else

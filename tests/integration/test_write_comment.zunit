@@ -16,13 +16,13 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${ZUNIT_TEST_DIR}/../fixtures/payloads"
+    _FIXTURES="${PWD}/tests/fixtures/payloads"
 
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
@@ -35,7 +35,7 @@
 # ---------------------------------------------------------------------------
 # TEST 1 — Positive: comment posted to PR when PR exists for the target
 # ---------------------------------------------------------------------------
-@test "[write comment — positive, PR exists] Comment posted to PR when PR found" {
+@test '[write comment — positive, PR exists] Comment posted to PR when PR found' {
     scaffold_write_inbox "${_FIXTURES}/valid_comment.md"
 
     # Simulate `gh pr view 1` returning a valid PR URL (PR exists).
@@ -45,7 +45,7 @@
     zsh bin/tos.zsh test-project write comment 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
 
     assert_mock_called     /tmp/tos_mock_gh_calls.log "pr comment"
     assert_mock_not_called /tmp/tos_mock_gh_calls.log "issue comment"
@@ -55,7 +55,7 @@
 # ---------------------------------------------------------------------------
 # TEST 2 — Positive: falls back to issue comment when no PR exists
 # ---------------------------------------------------------------------------
-@test "[write comment — positive, no PR] Fallback to issue comment when PR absent" {
+@test '[write comment — positive, no PR] Fallback to issue comment when PR absent' {
     scaffold_write_inbox "${_FIXTURES}/valid_comment.md"
 
     # Make `gh pr view` fail (PR does not exist yet).
@@ -65,14 +65,14 @@
     zsh bin/tos.zsh test-project write comment 2>&1
     exit_code=$?
 
-    assert equal "${exit_code}" "0"
+    assert "${exit_code}" equals "0"
     assert_mock_called /tmp/tos_mock_gh_calls.log "issue comment"
 }
 
 # ---------------------------------------------------------------------------
 # TEST 3 — Negative: missing TARGET field causes abort
 # ---------------------------------------------------------------------------
-@test "[write comment — negative] Missing TARGET causes abort without any gh call" {
+@test '[write comment — negative] Missing TARGET causes abort without any gh call' {
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_COMMENT_START===
 BODY=There is no TARGET field here.
@@ -83,6 +83,6 @@ PAYLOAD
     zsh bin/tos.zsh test-project write comment 2>&1
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
     assert_mock_not_called /tmp/tos_mock_gh_calls.log "comment"
 }

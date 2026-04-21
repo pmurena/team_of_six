@@ -6,7 +6,7 @@
 export AI_USER="team_of_six"
 export AI_GROUP="team_of_six"
 
-export TOS_MNT_ROOT="/mnt/team_of_six"
+export TOS_MNT_ROOT="${TOS_MNT_ROOT}"
 export TOS_BIN="$TOS_MNT_ROOT/.local/bin"
 export TOS_CONF="$TOS_MNT_ROOT/.local/conf"
 

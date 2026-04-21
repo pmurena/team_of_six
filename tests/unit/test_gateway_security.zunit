@@ -20,9 +20,9 @@
 # =============================================================================
 
 @setup {
-    source "${ZUNIT_TEST_DIR}/../helpers/scaffold.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/mocks.zsh"
-    source "${ZUNIT_TEST_DIR}/../helpers/assertions.zsh"
+    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
+    source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
 }
@@ -42,7 +42,7 @@
 #
 # We source a real module script (write/hard/code.zsh) in a subshell that
 # deliberately does NOT have TOS_CONTROLLER_LOCKED set.
-@test "Direct module invocation without TOS_CONTROLLER_LOCKED is inert" {
+@test 'Direct module invocation without TOS_CONTROLLER_LOCKED is inert' {
     # Run in a subshell (parentheses) so variable changes don't bleed out.
     local output exit_code
     output=$(
@@ -57,12 +57,12 @@
     exit_code=$?
 
     # The module must refuse to run (non-zero exit).
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # No files must have been created in the sandbox.
     local file_count
     file_count=$(find "${TOS_SANDBOX}" -type f 2>/dev/null | wc -l)
-    assert equal "${file_count}" "0"
+    assert "${file_count}" equals "0"
 
     # No git or gh calls must have been logged.
     assert_mock_not_called /tmp/tos_mock_gh_calls.log  ""
@@ -75,22 +75,28 @@
 # The gateway reads group membership via `id -Gn`. We override this command
 # with a function that returns a group list WITHOUT team_of_six, then invoke
 # the gateway and confirm it refuses to proceed.
-@test "Sudo boundary: user not in team_of_six group is rejected" {
+@test 'Sudo boundary: user not in team_of_six group is rejected' {
     local output exit_code
+    local mock_bin_dir="/tmp/tos_mock_bin"
+    mkdir -p "$mock_bin_dir"
+    
+    # Create a physical fake 'id' command
+    echo '#!/bin/zsh' > "$mock_bin_dir/id"
+    echo 'echo "not_a_member other_group"' >> "$mock_bin_dir/id"
+    chmod +x "$mock_bin_dir/id"
+
     output=$(
-        # Override `id` to return a group list that excludes team_of_six.
-        function id() { echo "not_a_member other_group"; }
-        export -f id
-        unset TOS_CONTROLLER_LOCKED  # gateway does the group check before setting this
+        export PATH="$mock_bin_dir:$PATH"
+        unset TOS_CONTROLLER_LOCKED
         zsh bin/tos.zsh test-project dummy action 2>&1
     )
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
-
-    # The rejection message should use language from the spec.
-    echo "${output}" | grep -qi "sealed\|permission\|access denied\|not a member\|forbidden"
-    assert equal "$?" "0"
+    rm -rf "$mock_bin_dir"
+    assert "${exit_code}" not_equals "0"
+    
+    # Note the corrected order here: Value first, then Operator
+    assert "$(echo "${output}" | grep -Ei "sealed|permission|access denied|not a member|forbidden")" equals 0
 }
 
 # ---------------------------------------------------------------------------
@@ -99,9 +105,9 @@
 # If the payload's TARGET_PROJECT does not match TOS_ACTIVE_PROJECT the
 # gateway must refuse to proceed. This prevents a context-confused agent from
 # writing to the wrong project.
-@test "Project name mismatch in payload causes hallucination rejection" {
+@test 'Project name mismatch in payload causes hallucination rejection' {
     # Seed the inbox with a payload that targets a DIFFERENT project.
-    scaffold_write_inbox "${ZUNIT_TEST_DIR}/../fixtures/payloads/meta_wrong_project.md"
+    scaffold_write_inbox "${PWD}/tests/fixtures/payloads/meta_wrong_project.md"
 
     # The active project is "test-project" (set in scaffold_setUp).
     # The payload says "wrong-project" — this must be caught.
@@ -109,16 +115,16 @@
     output=$(zsh bin/tos.zsh test-project write code 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     # No sandbox files should have been written.
     local file_count
     file_count=$(find "${TOS_SANDBOX}" -type f 2>/dev/null | wc -l)
-    assert equal "${file_count}" "0"
+    assert "${file_count}" equals "0"
 
     # Output must reference hallucination or project mismatch.
     echo "${output}" | grep -qi "hallucination\|project.*mismatch\|mismatch.*project"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # ---------------------------------------------------------------------------
@@ -126,27 +132,27 @@
 # ---------------------------------------------------------------------------
 # Same concept as above but for TARGET_TRINITY. The payload claims trinity 99
 # but the active lock is for trinity 1.
-@test "Trinity number mismatch in payload causes hallucination rejection" {
+@test 'Trinity number mismatch in payload causes hallucination rejection' {
     # Establish a valid hard lock for trinity 1.
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
 
     # Inbox payload claims trinity 99.
-    scaffold_write_inbox "${ZUNIT_TEST_DIR}/../fixtures/payloads/meta_wrong_trinity.md"
+    scaffold_write_inbox "${PWD}/tests/fixtures/payloads/meta_wrong_trinity.md"
 
     local output exit_code
     output=$(zsh bin/tos.zsh test-project write code 2>&1)
     exit_code=$?
 
-    assert not_equal "${exit_code}" "0"
+    assert "${exit_code}" not_equals "0"
 
     local file_count
     file_count=$(find "${TOS_SANDBOX}" -type f 2>/dev/null | wc -l)
-    assert equal "${file_count}" "0"
+    assert "${file_count}" equals "0"
 
     # Output must reference the trinity number discrepancy.
     echo "${output}" | grep -qi "trinity.*mismatch\|mismatch.*trinity\|hallucination\|99"
-    assert equal "$?" "0"
+    assert "$?" equals "0"
 }
 
 # ---------------------------------------------------------------------------
@@ -161,7 +167,7 @@
 #   a) Running the gateway bootstrap logic in a subshell.
 #   b) Forcing a non-zero exit (invalid command).
 #   c) Capturing GH_TOKEN from within the EXIT trap's aftermath.
-@test "GH_TOKEN is scrubbed from environment on gateway exit via EXIT trap" {
+@test 'GH_TOKEN is scrubbed from environment on gateway exit via EXIT trap' {
     # Run a minimal gateway invocation designed to fail quickly.
     # We capture whether GH_TOKEN is set AFTER the process returns.
     local token_after_exit
@@ -187,5 +193,5 @@
     # The parent shell should see UNSET because the subshell never exported
     # a modified GH_TOKEN back to us (environment goes one way: parent → child).
     # More precisely: we're confirming the pattern compiles and the trap fires.
-    assert equal "${token_after_exit}" "UNSET"
+    assert "${token_after_exit}" equals "UNSET"
 }
