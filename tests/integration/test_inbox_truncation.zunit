@@ -4,56 +4,75 @@
     source "${PWD}/tests/helpers/mocks.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
+    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+    mkdir -p "${_SANDBOX_PROJECT}"
+    git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" commit --allow-empty -m "Initial" >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" checkout -b tos-work-1 >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    echo "calculator.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    echo "test.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
     export TOS_ACTIVE_TRINITY="1"
     : > /tmp/tos_order.log
 }
-@teardown { scaffold_tearDown; rm -f /tmp/tos_order.log; }
+
+@teardown {
+    scaffold_tearDown
+    rm -f /tmp/tos_order.log
+}
 
 @test 'Inbox truncated before git commit in write code (ADR 10)' {
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
 TARGET_PROJECT=team_of_six
 TARGET_TRINITY=1
+TITLE=Update
+BODY=Fix
 ===TOS_META_END===
 ===TOS_FILE_START: test.zsh===
 content
 ===TOS_FILE_END===
 PAYLOAD
-
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
     cat > "$TOS_MOCK_BIN/git" <<'INNER'
 #!/usr/bin/env zsh
 if [[ "$*" == *commit* ]]; then
-    echo "INBOX_SIZE_AT_COMMIT=$(wc -c < "$TOS_INBOX")" >> /tmp/tos_order.log
+    if [[ ! -s "$TOS_INBOX" ]]; then echo "EMPTY" > /tmp/tos_order.log; fi
+    exit 0
 fi
+REAL_GIT=$(command -v git | grep -v "tos_mock_bin" | head -n 1)
+[[ -z "$REAL_GIT" ]] && REAL_GIT="/usr/bin/git"
+"$REAL_GIT" "$@"
 INNER
     chmod +x "$TOS_MOCK_BIN/git"
-
-    zsh bin/tos.zsh team_of_six write code 2>&1
-    assert_file_contains /tmp/tos_order.log "INBOX_SIZE_AT_COMMIT=0"
+    zsh bin/tos.zsh team_of_six write code >/dev/null 2>&1 || true
+    local result=$(cat /tmp/tos_order.log 2>/dev/null)
+    if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }
 
 @test 'Inbox truncated before gh issue create in create issue (ADR 10)' {
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
-    
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_ISSUE_START===
 TITLE=Truncation test
 ===TOS_ISSUE_END===
 PAYLOAD
-
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
     cat > "$TOS_MOCK_BIN/gh" <<'INNER'
 #!/usr/bin/env zsh
 if [[ "$*" == *"issue create"* ]]; then
-    echo "INBOX_SIZE_AT_ISSUE_CREATE=$(wc -c < "$TOS_INBOX")" >> /tmp/tos_order.log
+    if [[ ! -s "$TOS_INBOX" ]]; then echo "EMPTY" > /tmp/tos_order.log; fi
 fi
 INNER
     chmod +x "$TOS_MOCK_BIN/gh"
-
-    zsh bin/tos.zsh team_of_six create issue 2>&1
-    assert_file_contains /tmp/tos_order.log "INBOX_SIZE_AT_ISSUE_CREATE=0"
+    zsh bin/tos.zsh team_of_six create issue >/dev/null 2>&1 || true
+    local result=$(cat /tmp/tos_order.log 2>/dev/null)
+    if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }
 
 @test 'Inbox truncated before gh pr merge in close trinity (ADR 10)' {
@@ -64,15 +83,17 @@ TARGET_TRINITY=1
 CONFIRM=TRUE
 ===TOS_META_END===
 PAYLOAD
-
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
     cat > "$TOS_MOCK_BIN/gh" <<'INNER'
 #!/usr/bin/env zsh
 if [[ "$*" == *"pr merge"* ]]; then
-    echo "INBOX_SIZE_AT_PR_MERGE=$(wc -c < "$TOS_INBOX")" >> /tmp/tos_order.log
+    if [[ ! -s "$TOS_INBOX" ]]; then echo "EMPTY" > /tmp/tos_order.log; fi
 fi
 INNER
     chmod +x "$TOS_MOCK_BIN/gh"
-
-    zsh bin/tos.zsh team_of_six close trinity 1 2>&1
-    assert_file_contains /tmp/tos_order.log "INBOX_SIZE_AT_PR_MERGE=0"
+    zsh bin/tos.zsh team_of_six close trinity 1 >/dev/null 2>&1 || true
+    local result=$(cat /tmp/tos_order.log 2>/dev/null)
+    if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }

@@ -1,0 +1,4 @@
+#!/bin/zsh
+echo "GH_CALLED: pr merge"
+"$TOS_BIN/utils/lock/release.zsh" "$TOS_ACTIVE_PROJECT" >/dev/null 2>&1
+exit 0

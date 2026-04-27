@@ -6,7 +6,6 @@ export SUDO_USER="test_architect"
 export TOS_IPC="${TOS_MNT_ROOT}/.ipc"
 export TOS_LOCKS="${TOS_IPC}/locks"
 export TOS_SANDBOX="${TOS_MNT_ROOT}/sandbox"
-    mkdir -p "${TOS_SANDBOX}/team_of_six"
 export TOS_LOCAL="${TOS_MNT_ROOT}/.local"
 export TOS_CONF="${TOS_LOCAL}/conf"
 export TOS_TOKEN_FILE="${TOS_CONF}/.token"
@@ -15,8 +14,12 @@ export TOS_OUTBOX="${TOS_IPC}/${SUDO_USER}/outbox.md"
 export TOS_BIN="${TOS_LOCAL}/bin"
 
 function scaffold_setUp() {
-    # 1. Fix PATH: Prepend mock bin AND ensure system bins are present
-    export PATH="${PWD}/tests/helpers/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+    # 1. Fix PATH: Prepend mock bin ONLY if defined, and ensure system bins are present
+    if [[ -n "${TOS_MOCK_BIN:-}" ]]; then
+        export PATH="${TOS_MOCK_BIN}:${PWD}/tests/helpers/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+    else
+        export PATH="${PWD}/tests/helpers/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+    fi
 
     # 2. Re-clean and build the tree
     rm -rf "${TOS_MNT_ROOT}" 2>/dev/null
@@ -32,7 +35,6 @@ export TOS_BIN="${TOS_BIN}"
 export TOS_IPC="${TOS_IPC}"
 export TOS_LOCKS="${TOS_LOCKS}"
 export TOS_SANDBOX="${TOS_SANDBOX}"
-    mkdir -p "${TOS_SANDBOX}/team_of_six"
 export TOS_CONTEXT="${TOS_OUTBOX}"
 export TOS_INPUT="${TOS_INBOX}"
 export TOS_MNT_ROOT="${TOS_MNT_ROOT}"
@@ -49,10 +51,7 @@ CONFEOF
     : > "${TOS_INBOX}"
     : > "${TOS_OUTBOX}"
 
-    # 5. Symlink production utilities into the fake TOS_BIN so the gateway
-    #    can find parse_blocks.zsh, check_manifest_visa.zsh, lock scripts, etc.
-    #    Use the real repo bin/utils as the source (PWD is the repo root when
-    #    ZUnit is invoked).
+    # 5. Symlink production utilities
     local _REAL_UTILS="${PWD}/bin/utils"
     for f in "${_REAL_UTILS}"/*.zsh(N); do
         ln -sf "$f" "${TOS_BIN}/utils/$(basename "$f")"
@@ -63,8 +62,7 @@ CONFEOF
 
     touch "${TOS_BIN}/utils/error_trap.zsh"
 
-    # 6. Symlink production modules into the fake TOS_BIN so the gateway
-    #    can dispatch to real module scripts when TOS_MODULE_BASE is not overridden.
+    # 6. Symlink production modules
     local _REAL_MODULES="${PWD}/bin/modules"
     if [[ -d "${_REAL_MODULES}" ]]; then
         mkdir -p "${TOS_BIN}/modules"

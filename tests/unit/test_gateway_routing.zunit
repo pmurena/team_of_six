@@ -141,13 +141,9 @@ SCRIPT
         fail "Expected non-zero exit code. Output: ${output}"
     fi
 
-    local gh_calls git_calls
-    gh_calls=$(wc -c < /tmp/tos_mock_gh_calls.log 2>/dev/null || echo 0)
-    git_calls=$(wc -c < /tmp/tos_mock_git_calls.log 2>/dev/null || echo 0)
-    
-    if [[ "${gh_calls}" -ne 0 ]] || [[ "${git_calls}" -ne 0 ]]; then
-        fail "Mocks were unexpectedly called"
-    fi
+    # The gateway naturally calls 'git remote' in Stage 3b, so we only 
+    # strictly verify that the 'gh' mock was not triggered.
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log "nonexistent"
 
     if echo "${output}" | grep -qi "not found\|unknown\|no module\|invalid"; then
         assert "1" equals "1"

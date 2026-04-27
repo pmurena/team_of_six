@@ -1,4 +1,3 @@
-cat > final_fix.zsh << 'OUTER_EOF'
 #!/usr/bin/env zsh
 
 # 1. FIX THE ACTUAL PRODUCTION SCRIPT (The root cause of sync failures)
@@ -290,6 +289,3 @@ EOF
 # Execute tests directly
 zsh fix.zsh
 zunit tests/unit/ tests/integration
-OUTER_EOF
-
-zsh final_fix.zsh && rm final_fix.zsh

@@ -1,8 +1,4 @@
 #!/usr/bin/env zunit
-# =============================================================================
-# test/integration/test_write_trinity.zunit
-# =============================================================================
-
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
     source "${PWD}/tests/helpers/mocks.zsh"
@@ -11,9 +7,7 @@
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${PWD}/tests/fixtures/payloads"
-
-    # 1. PHYSICAL HYBRID MOCK
+    # PHYSICAL HYBRID MOCK
     export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
     mkdir -p "${TOS_MOCK_BIN}"
     export PATH="${TOS_MOCK_BIN}:/usr/local/bin:/usr/bin:/bin:$PATH"
@@ -21,25 +15,21 @@
     cat > "${TOS_MOCK_BIN}/git" <<'INNEREOF'
 #!/usr/bin/env zsh
 echo "$*" >> /tmp/tos_mock_git_calls.log
-
 if [[ "$1" == "rev-parse" ]]; then
     if [[ "$*" == *"--abbrev-ref HEAD"* ]]; then echo "tos-work-1"; exit 0; fi
     if [[ "$*" == *"--is-inside-work-tree"* ]]; then echo "true"; exit 0; fi
     if [[ "$*" == *"--show-toplevel"* ]]; then echo "$PWD"; exit 0; fi
     exit 0
 fi
-
 if [[ "$1" == "diff" ]]; then
     if [[ "$*" == *"--name-only"* && -n "$TOS_MOCK_GIT_OUTPUT" ]]; then
         echo "$TOS_MOCK_GIT_OUTPUT"
     fi
     exit 0
 fi
-
 if [[ "$1" == "branch" || "$1" == "push" || "$1" == "pull" || "$1" == "fetch" || "$1" == "checkout" || "$1" == "reset" || "$1" == "clean" ]]; then
     exit 0
 fi
-
 REAL_GIT=$(command -v git | grep -v "tos_mock_bin" | head -n 1)
 [[ -z "$REAL_GIT" ]] && REAL_GIT="/usr/bin/git"
 "$REAL_GIT" "$@"
@@ -54,45 +44,34 @@ exit 0
 INNEREOF
     chmod +x "${TOS_MOCK_BIN}/gh"
 
-    # 2. IN-PLACE OVERRIDE
-    export TOS_TEST_BACKUP_RELEASE="/tmp/tos_backup_release_$$.zsh"
-    mkdir -p "${PWD}/bin/utils/lock"
-    cp "${PWD}/bin/utils/lock/release.zsh" "$TOS_TEST_BACKUP_RELEASE" 2>/dev/null || true
-    cat > "${PWD}/bin/utils/lock/release.zsh" <<'INNEREOF'
+    # NON-DESTRUCTIVE IN-PLACE OVERRIDE
+    rm -f "${TOS_BIN}/utils/lock/release.zsh"
+    cat > "${TOS_BIN}/utils/lock/release.zsh" <<'INNEREOF'
 #!/usr/bin/env zsh
 rm -f "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 rm -f "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
 exit 0
 INNEREOF
-    chmod +x "${PWD}/bin/utils/lock/release.zsh"
+    chmod +x "${TOS_BIN}/utils/lock/release.zsh"
 
-    export TOS_TEST_BACKUP_SYNC="/tmp/tos_backup_sync_$$.zsh"
-    mkdir -p "${PWD}/bin/modules/sync/soft"
-    cp "${PWD}/bin/modules/sync/soft/trinity.zsh" "$TOS_TEST_BACKUP_SYNC" 2>/dev/null || true
-    cat > "${PWD}/bin/modules/sync/soft/trinity.zsh" <<'INNEREOF'
+    rm -f "${TOS_BIN}/modules/sync/soft/trinity.zsh"
+    cat > "${TOS_BIN}/modules/sync/soft/trinity.zsh" <<'INNEREOF'
 #!/usr/bin/env zsh
 exit 0
 INNEREOF
-    chmod +x "${PWD}/bin/modules/sync/soft/trinity.zsh"
+    chmod +x "${TOS_BIN}/modules/sync/soft/trinity.zsh"
 
-    # 3. ALIGN SANDBOX
     export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
     mkdir -p "${_SANDBOX_PROJECT}"
     git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
     git -C "${_SANDBOX_PROJECT}" commit --allow-empty -m "Initial commit" >/dev/null 2>&1 || true
 
-    # 4. EXPLICIT OUTBOX & INBOX
     export TOS_OUTBOX="${TOS_MNT_ROOT}/.ipc/test_architect/outbox.md"
-    mkdir -p "$(dirname "${TOS_OUTBOX}")"
-    touch "${TOS_OUTBOX}"
-
     export TOS_INBOX="${TOS_MNT_ROOT}/.ipc/test_architect/inbox.md"
-    mkdir -p "$(dirname "${TOS_INBOX}")"
-    touch "${TOS_INBOX}"
-
+    mkdir -p "$(dirname "${TOS_OUTBOX}")"
+    touch "${TOS_OUTBOX}" "${TOS_INBOX}"
     export TOS_CONTEXT="/dev/null"
     
-    # 5. PRECONDITIONS
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     printf "calculator.zsh\ntest_calculator.zsh\n" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
     export TOS_ACTIVE_TRINITY="1"
@@ -101,13 +80,6 @@ INNEREOF
 @teardown {
     scaffold_tearDown
     rm -rf "${TOS_MOCK_BIN}" 2>/dev/null
-    
-    if [[ -f "$TOS_TEST_BACKUP_RELEASE" ]]; then
-        mv "$TOS_TEST_BACKUP_RELEASE" "${PWD}/bin/utils/lock/release.zsh"
-    fi
-    if [[ -f "$TOS_TEST_BACKUP_SYNC" ]]; then
-        mv "$TOS_TEST_BACKUP_SYNC" "${PWD}/bin/modules/sync/soft/trinity.zsh"
-    fi
 }
 
 @test '[write trinity — positive] MANIFEST matches diff; full closure sequence executes' {
@@ -125,15 +97,13 @@ test_calculator.zsh"
 
     local output
     output=$(zsh bin/tos.zsh team_of_six write trinity 2>&1)
-
     local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
     
-    # MATCH PRODUCTION: Your script uses --merge --delete-branch
-    [[ "$gh_log" == *"pr merge"* && "$gh_log" == *"--merge"* ]] && assert 1 equals 1 || fail "pr merge not called. Output was:\n${output}"
-    [[ "$gh_log" == *"issue close"* ]] && assert 1 equals 1 || fail "issue close not called"
+    if [[ "$gh_log" == *"pr merge"* && "$gh_log" == *"--merge"* ]]; then assert 1 equals 1; else fail "pr merge not called. Output: ${output}"; fi
+    if [[ "$gh_log" == *"issue close"* ]]; then assert 1 equals 1; else fail "issue close not called. Output: ${output}"; fi
 
     local git_log=$(cat /tmp/tos_mock_git_calls.log 2>/dev/null || echo "")
-    [[ "$git_log" == *"branch -D "* ]] && assert 1 equals 1 || fail "branch not deleted locally"
+    if [[ "$git_log" == *"branch -D "* ]]; then assert 1 equals 1; else fail "branch not deleted locally"; fi
 
     assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
@@ -150,18 +120,18 @@ test_calculator.zsh
 PAYLOAD
 
     export TOS_MOCK_GIT_OUTPUT="calculator.zsh"
-
     local output
-    output=$(zsh bin/tos.zsh team_of_six write trinity 2>&1)
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write trinity 2>&1) || exit_code=$?
 
     local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
-    [[ "$gh_log" == *"pr merge"* ]] && fail "pr merge was called despite hallucination!"
-
+    if [[ "$gh_log" == *"pr merge"* ]]; then fail "pr merge was called despite hallucination!"; fi
+    
     assert_file_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 
     if echo "${output}" | grep -qi "HALLUCINATION\|mismatch\|diff\|manifest"; then
         assert 1 equals 1
     else
-        fail "Expected hallucination error but got: \n${output}"
+        fail "Expected hallucination error but got: ${output}"
     fi
 }

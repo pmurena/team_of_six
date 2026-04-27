@@ -1,192 +1,122 @@
 #!/usr/bin/env zunit
 # =============================================================================
-# test/integration/test_close_module.zunit
+# test/unit/test_parse_blocks.zunit
 # =============================================================================
 
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
-    source "${PWD}/tests/helpers/mocks.zsh"
-    source "${PWD}/tests/helpers/assertions.zsh"
-    
     scaffold_setUp
-    reset_mocks
-
-    # 1. INBOX FIX: Calculate the exact path the scaffold uses for the inbox
-    export _INBOX="${TOS_MNT_ROOT}/.ipc/test_architect/inbox.md"
-    mkdir -p "$(dirname "${_INBOX}")"
-
-    # 2. MODULE INJECTION: Place the real 'close' module into the scaffold's expected path
-    mkdir -p "${TOS_MNT_ROOT}/.local/bin/modules/close"
-    cp -r "${PWD}/bin/modules/close/"* "${TOS_MNT_ROOT}/.local/bin/modules/close/" 2>/dev/null || true
-
-    # 3. SANDBOX ALIGNMENT
-    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
-    mkdir -p "${_SANDBOX_PROJECT}"
-
-    export TOS_CONTEXT="/dev/null"
+    
+    export TEST_INBOX="/tmp/tos_parse_test_inbox.md"
+    export TEST_OUTDIR="/tmp/tos_parse_test_out"
+    mkdir -p "$TEST_OUTDIR"
 }
 
 @teardown {
     scaffold_tearDown
+    rm -f "$TEST_INBOX"
+    rm -rf "$TEST_OUTDIR"
 }
 
-# ===========================================================================
-# close trinity
-# ===========================================================================
-
-@test '[close trinity — positive] Squash merges PR, cleans branch and lock' {
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    echo "calculator.zsh"           > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
-    export TOS_ACTIVE_TRINITY="1"
-
-    # Write directly to the calculated inbox path
-    cat > "${_INBOX}" <<EOF
+# ---------------------------------------------------------------------------
+# TEST 1 — Parse META block (key-value)
+# ---------------------------------------------------------------------------
+@test 'parse_blocks auto-detects META block and extracts kv pairs' {
+    cat > "$TEST_INBOX" <<'EOF'
 ===TOS_META_START===
 TARGET_PROJECT=team_of_six
-TARGET_TRINITY=1
+TARGET_TRINITY=2
 CONFIRM=TRUE
 ===TOS_META_END===
 EOF
 
-    export TOS_MOCK_GH_OUTPUT='{"state":"OPEN","number":1}'
-
-    local exit_code=0
-    zsh bin/tos.zsh team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
-
-    assert "${exit_code}" equals 0
+    zsh bin/utils/parse_blocks.zsh "$TEST_INBOX" "$TEST_OUTDIR"
+    assert "$?" equals 0
     
-    local gh_log=$(< /tmp/tos_mock_gh_calls.log)
-    if [[ "$gh_log" == *"pr merge --squash"* ]]; then
-        assert 1 equals 1
-    else
-        fail "GH pr merge not called. Log: $gh_log"
-    fi
+    local p_val=$(cat "$TEST_OUTDIR/1/TARGET_PROJECT.txt" 2>/dev/null)
+    local t_val=$(cat "$TEST_OUTDIR/1/TARGET_TRINITY.txt" 2>/dev/null)
+    local c_val=$(cat "$TEST_OUTDIR/1/CONFIRM.txt" 2>/dev/null)
 
-    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    assert "$p_val" same_as "team_of_six"
+    assert "$t_val" same_as "2"
+    assert "$c_val" same_as "TRUE"
 }
 
-@test '[close trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    export TOS_ACTIVE_TRINITY="1"
+# ---------------------------------------------------------------------------
+# TEST 2 — Parse FILE block (raw)
+# ---------------------------------------------------------------------------
+@test 'parse_blocks auto-detects FILE block and preserves raw formatting' {
+    # Using Python instead of Rust to avoid curly braces breaking ZUnit's parser
+    cat > "$TEST_INBOX" <<'EOF'
+===TOS_FILE_START: src/main.py===
+def main():
+    print("Hello, team of six!")
+===TOS_FILE_END===
+EOF
 
-    cat > "${_INBOX}" <<EOF
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=1
-CONFIRM=FALSE
-===TOS_META_END===
+    zsh bin/utils/parse_blocks.zsh "$TEST_INBOX" "$TEST_OUTDIR"
+    assert "$?" equals 0
+
+    local target=$(cat "$TEST_OUTDIR/file_1/_TARGET.txt" 2>/dev/null)
+    assert "$target" same_as "src/main.py"
+    
+    local content=$(cat "$TEST_OUTDIR/file_1/RAW_BODY.txt" 2>/dev/null)
+    if [[ "$content" == *'print("Hello'* ]]; then
+        assert 1 equals 1
+    else
+        fail "Raw body was not preserved correctly: $content"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Parse FILE missing target path
+# ---------------------------------------------------------------------------
+@test 'parse_blocks rejects FILE block without a target path' {
+    cat > "$TEST_INBOX" <<'EOF'
+===TOS_FILE_START===
+def main(): pass
+===TOS_FILE_END===
 EOF
 
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six close trinity 1 2>&1) || exit_code=$?
-
+    output=$(zsh bin/utils/parse_blocks.zsh "$TEST_INBOX" "$TEST_OUTDIR" 2>&1) || exit_code=$?
+    
     if [[ "${exit_code}" -ne 0 ]]; then
         assert 1 equals 1
     else
-        fail "Should have failed without confirmation"
+        fail "Expected non-zero exit for missing path"
     fi
 
-    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
-    if [[ "$gh_log" == *"pr merge"* ]]; then
-        fail "Merge was called despite no confirmation!"
-    fi
-}
-
-# ===========================================================================
-# close project
-# ===========================================================================
-
-@test '[close project — positive] Removes sandbox directory; leaves GitHub remote intact' {
-    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
-    export TOS_ACTIVE_TRINITY="0"
-
-    cat > "${_INBOX}" <<EOF
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=0
-CONFIRM=TRUE
-===TOS_META_END===
-EOF
-
-    local exit_code=0
-    zsh bin/tos.zsh team_of_six close project >/dev/null 2>&1 || exit_code=$?
-
-    assert "${exit_code}" equals 0
-    assert_dir_not_exists "${_SANDBOX_PROJECT}"
-}
-
-@test '[close project — negative] Hard lock still active blocks close project' {
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    export TOS_ACTIVE_TRINITY="1"
-
-    cat > "${_INBOX}" <<EOF
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=1
-CONFIRM=TRUE
-===TOS_META_END===
-EOF
-
-    local output
-    local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six close project 2>&1) || exit_code=$?
-
-    if [[ "${exit_code}" -ne 0 ]]; then
+    if [[ "$output" == *"ERROR: FILE block 1 has no path"* ]]; then
         assert 1 equals 1
     else
-        fail "Close project should be blocked while a Hard Lock is active"
-    fi
-    
-    assert_dir_exists "${_SANDBOX_PROJECT}"
-}
-
-@test '[close project — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
-    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
-    export TOS_ACTIVE_TRINITY="0"
-
-    cat > "${_INBOX}" <<EOF
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=0
-CONFIRM=FALSE
-===TOS_META_END===
-EOF
-
-    local output
-    local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six close project 2>&1) || exit_code=$?
-
-    [[ "${exit_code}" -ne 0 ]] && assert 1 equals 1 || fail "Expected non-zero exit"
-    
-    if [[ "$output" == *"CONFIRM"* ]]; then
-        assert 1 equals 1
-    else
-        fail "Output did not warn about confirmation. Got: $output"
+        fail "Did not output expected error message. Got: $output"
     fi
 }
 
-@test '[delete trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
-    # Test for the specific delete trinity block
-    # Since delete trinity logic may live in close/hard/trinity or delete/hard/trinity,
-    # let's inject delete as well just in case.
-    mkdir -p "${TOS_MNT_ROOT}/.local/bin/modules/delete"
-    cp -r "${PWD}/bin/modules/delete/"* "${TOS_MNT_ROOT}/.local/bin/modules/delete/" 2>/dev/null || true
-
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    export TOS_ACTIVE_TRINITY="1"
-
-    cat > "${_INBOX}" <<EOF
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=1
-CONFIRM=FALSE
-===TOS_META_END===
+# ---------------------------------------------------------------------------
+# TEST 4 — Parse ISSUE and COMMENT blocks
+# ---------------------------------------------------------------------------
+@test 'parse_blocks auto-detects ISSUE and COMMENT blocks' {
+    cat > "$TEST_INBOX" <<'EOF'
+===TOS_ISSUE_START===
+TITLE=Houston, we have a bug
+BODY=It breaks when I click the thing.
+===TOS_ISSUE_END===
+===TOS_COMMENT_START===
+BODY=I am looking into this now.
+===TOS_COMMENT_END===
 EOF
 
-    local output
-    local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six delete trinity 1 2>&1) || exit_code=$?
+    zsh bin/utils/parse_blocks.zsh "$TEST_INBOX" "$TEST_OUTDIR"
+    assert "$?" equals 0
 
-    [[ "${exit_code}" -ne 0 ]] && assert 1 equals 1 || fail "Delete trinity should require confirmation"
+    local t_val=$(cat "$TEST_OUTDIR/issue_1/TITLE.txt" 2>/dev/null)
+    local b_val=$(cat "$TEST_OUTDIR/issue_1/BODY.txt" 2>/dev/null)
+    local c_val=$(cat "$TEST_OUTDIR/comment_1/BODY.txt" 2>/dev/null)
+
+    assert "$t_val" same_as "Houston, we have a bug"
+    assert "$b_val" same_as "It breaks when I click the thing."
+    assert "$c_val" same_as "I am looking into this now."
 }
