@@ -2,33 +2,40 @@
 # =============================================================================
 # test/integration/test_write_plan.zunit
 # =============================================================================
-# WHAT IS TESTED
-#   bin/modules/write/hard/plan.zsh — reads an APPROVED_FILES list from a
-#   PLAN payload and writes a .manifest visa file to the lock directory.
-#
-# WHAT IS THE MANIFEST VISA? (ADR 9 — Intent Locking)
-#   Before an agent may write any file via `write code`, the Architect must
-#   pre-authorise the exact set of filenames with `write plan`. The gateway
-#   writes these names to:
-#       $TOS_LOCKS/<project>_trinity_<N>.manifest
-#   Any file not on this list will cause a SEC-FAULT at write time.
-#   Re-issuing `write plan` replaces the previous visa entirely.
-#
-# PRECONDITIONS
-#   A HARD_LOCK must be active (trinity > 0) — `write plan` is a hard/ module.
-# =============================================================================
 
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
     source "${PWD}/tests/helpers/mocks.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
+    
     scaffold_setUp
     reset_mocks
 
     _FIXTURES="${PWD}/tests/fixtures/payloads"
 
-    # write plan requires a HARD_LOCK.
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    # 1. FULL MODULE & UTILS INJECTION
+    mkdir -p "${TOS_MNT_ROOT}/.local/bin/modules/write/hard"
+    mkdir -p "${TOS_MNT_ROOT}/.local/bin/utils"
+    cp -r "${PWD}/bin/modules/write/hard/"* "${TOS_MNT_ROOT}/.local/bin/modules/write/hard/" 2>/dev/null || true
+    cp -r "${PWD}/bin/utils/"* "${TOS_MNT_ROOT}/.local/bin/utils/" 2>/dev/null || true
+
+    # 2. ALIGN SANDBOX & SATISFY GIT SECURITY
+    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+    mkdir -p "${_SANDBOX_PROJECT}/.git" # Satisfies 'is-inside-work-tree' natively!
+
+    # 3. EXPLICIT OUTBOX & INBOX
+    export TOS_OUTBOX="${TOS_MNT_ROOT}/.ipc/test_architect/outbox.md"
+    mkdir -p "$(dirname "${TOS_OUTBOX}")"
+    touch "${TOS_OUTBOX}"
+
+    export TOS_INBOX="${TOS_MNT_ROOT}/.ipc/test_architect/inbox.md"
+    mkdir -p "$(dirname "${TOS_INBOX}")"
+    touch "${TOS_INBOX}"
+
+    export TOS_CONTEXT="/dev/null"
+    
+    # 4. PRECONDITIONS
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
 }
 
@@ -42,61 +49,75 @@
 @test '[write plan — positive] PLAN block creates manifest visa in lock directory' {
     scaffold_write_inbox "${_FIXTURES}/valid_plan.md"
 
-    local exit_code
-    zsh bin/tos.zsh test-project write plan 2>&1
-    exit_code=$?
+    # Hallucination Control Alignment
+    sed -i 's/TARGET_PROJECT=.*/TARGET_PROJECT=team_of_six/g' "${TOS_INBOX}" 2>/dev/null || true
+    sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
 
-    assert "${exit_code}" equals "0"
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write plan 2>&1) || exit_code=$?
 
-    local manifest="${TOS_LOCKS}/test-project_trinity_1.manifest"
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
+    assert "${exit_code}" equals 0
+
+    local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
     assert_file_exists "${manifest}"
-    assert_file_contains "${manifest}" "calculator.zsh"
-    assert_file_contains "${manifest}" "test_calculator.zsh"
+    
+    local content=$(<"${manifest}" 2>/dev/null || echo "")
+    [[ "$content" == *"calculator.zsh"* ]] && assert 1 equals 1 || fail "Manifest missing calculator.zsh"
+    [[ "$content" == *"test_calculator.zsh"* ]] && assert 1 equals 1 || fail "Manifest missing test_calculator.zsh"
 
     # Inbox must be truncated after execution (ADR 10).
-    assert_file_empty "${TOS_INBOX}"
+    [[ ! -s "${TOS_INBOX}" ]] && assert 1 equals 1 || fail "Inbox must be empty"
 }
 
 # ---------------------------------------------------------------------------
 # TEST 2 — Negative: Missing APPROVED_FILES causes abort
 # ---------------------------------------------------------------------------
 @test '[write plan — negative] PLAN block without APPROVED_FILES causes abort' {
-    # Write a PLAN block that has no APPROVED_FILES field.
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_PLAN_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
 SOME_OTHER_FIELD=irrelevant
 ===TOS_PLAN_END===
 PAYLOAD
 
-    local exit_code
-    zsh bin/tos.zsh test-project write plan 2>&1
-    exit_code=$?
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write plan 2>&1) || exit_code=$?
 
-    assert "${exit_code}" not_equals "0"
+    if [[ "${exit_code}" -eq 0 ]]; then fail "Gateway failed to abort! Output log:\n${output}"; fi
 
     # No manifest file should have been created.
-    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.manifest"
+    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
 }
 
 # ---------------------------------------------------------------------------
 # TEST 3 — Re-issuing write plan overwrites the previous manifest
 # ---------------------------------------------------------------------------
-# The Architect may change their mind about which files are needed. A second
-# `write plan` must replace the visa entirely — the old list must be gone.
 @test '[write plan — overwrite] Re-issuing write plan replaces previous manifest' {
     # Seed an existing manifest with a different (old) file list.
-    echo "old_file.zsh" > "${TOS_LOCKS}/test-project_trinity_1.manifest"
+    echo "old_file.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
 
     # Now issue a new plan with a different file.
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_PLAN_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
 APPROVED_FILES=new_file.zsh
 ===TOS_PLAN_END===
 PAYLOAD
 
-    zsh bin/tos.zsh test-project write plan 2>&1
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write plan 2>&1) || exit_code=$?
 
-    local manifest="${TOS_LOCKS}/test-project_trinity_1.manifest"
-    assert_file_contains     "${manifest}" "new_file.zsh"
-    assert_file_not_contains "${manifest}" "old_file.zsh"
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
+
+    local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    local content=$(<"${manifest}" 2>/dev/null || echo "")
+    
+    [[ "$content" == *"new_file.zsh"* ]] && assert 1 equals 1 || fail "Manifest missing new_file.zsh"
+    [[ "$content" != *"old_file.zsh"* ]] && assert 1 equals 1 || fail "Manifest still contains old_file.zsh"
 }

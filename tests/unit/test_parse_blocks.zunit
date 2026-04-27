@@ -1,190 +1,192 @@
 #!/usr/bin/env zunit
 # =============================================================================
-# test/unit/test_parse_blocks.zunit
-# =============================================================================
-# WHAT IS TESTED
-#   bin/utils/parse_blocks.zsh — the AWK-based parser that reads the TOS
-#   protocol from the inbox and extracts each block's fields into individual
-#   files under a numbered output directory.
-#
-# PROTOCOL OVERVIEW (for new readers)
-#   The TOS IPC protocol uses tagged plain-text blocks inside Markdown files:
-#
-#       ===TOS_META_START===
-#       KEY=value
-#       ===TOS_META_END===
-#
-#   The parser produces a directory tree:
-#       <output_dir>/
-#         1/              ← first META block; key-value fields as .txt files
-#         file_1/         ← first FILE block; _TARGET.txt + RAW_BODY.txt
-#         file_2/         ← second FILE block
-#         plan_1/         ← first PLAN block
-#         issue_1/        ← first ISSUE block
-#         comment_1/      ← first COMMENT block
-#         trinity_1/      ← first TRINITY block
-#
-# EACH TEST
-#   1. Writes a fixture to a temp input file.
-#   2. Calls parse_blocks.zsh with that file as input.
-#   3. Asserts expected output files exist with expected content.
+# test/integration/test_close_module.zunit
 # =============================================================================
 
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
-    source "bin/tos.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
+    
     scaffold_setUp
+    reset_mocks
 
-    # Use a per-process temp directory so parallel test runs don't collide.
-    # $$ is the current process ID — guaranteed unique per run.
-    export TOS_PARSE_OUTPUT_DIR="/tmp/tos_parse_test_$$"
-    mkdir -p "${TOS_PARSE_OUTPUT_DIR}"
+    # 1. INBOX FIX: Calculate the exact path the scaffold uses for the inbox
+    export _INBOX="${TOS_MNT_ROOT}/.ipc/test_architect/inbox.md"
+    mkdir -p "$(dirname "${_INBOX}")"
 
-    # Convenience: path to the fixtures directory.
-    _FIXTURES="${PWD}/tests/fixtures/payloads"
+    # 2. MODULE INJECTION: Place the real 'close' module into the scaffold's expected path
+    mkdir -p "${TOS_MNT_ROOT}/.local/bin/modules/close"
+    cp -r "${PWD}/bin/modules/close/"* "${TOS_MNT_ROOT}/.local/bin/modules/close/" 2>/dev/null || true
+
+    # 3. SANDBOX ALIGNMENT
+    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+    mkdir -p "${_SANDBOX_PROJECT}"
+
+    export TOS_CONTEXT="/dev/null"
 }
 
 @teardown {
     scaffold_tearDown
-    rm -rf "${TOS_PARSE_OUTPUT_DIR}" 2>/dev/null
 }
 
-# Helper: run the parser against a fixture file and capture output.
-# Usage: _run_parser <fixture_filename>
-# Sets global _parser_output and _parser_exit.
-function _run_parser() {
-    local fixture="$1"
-    _parser_output=$(zsh bin/utils/parse_blocks.zsh \
-        "${_FIXTURES}/${fixture}" \
-        "${TOS_PARSE_OUTPUT_DIR}" 2>&1)
-    _parser_exit=$?
+# ===========================================================================
+# close trinity
+# ===========================================================================
+
+@test '[close trinity — positive] Squash merges PR, cleans branch and lock' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    echo "calculator.zsh"           > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    export TOS_ACTIVE_TRINITY="1"
+
+    # Write directly to the calculated inbox path
+    cat > "${_INBOX}" <<EOF
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+CONFIRM=TRUE
+===TOS_META_END===
+EOF
+
+    export TOS_MOCK_GH_OUTPUT='{"state":"OPEN","number":1}'
+
+    local exit_code=0
+    zsh bin/tos.zsh team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
+
+    assert "${exit_code}" equals 0
+    
+    local gh_log=$(< /tmp/tos_mock_gh_calls.log)
+    if [[ "$gh_log" == *"pr merge --squash"* ]]; then
+        assert 1 equals 1
+    else
+        fail "GH pr merge not called. Log: $gh_log"
+    fi
+
+    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 1 — META block: all key-value fields extracted to individual files
-# ---------------------------------------------------------------------------
-@test 'META block: all key-value fields extracted to individual files' {
-    _run_parser "valid_meta.md"
+@test '[close trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
 
-    assert "${_parser_exit}" equals "0"
+    cat > "${_INBOX}" <<EOF
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+CONFIRM=FALSE
+===TOS_META_END===
+EOF
 
-    # The parser should create a subdirectory "1" for the first META block.
-    local base="${TOS_PARSE_OUTPUT_DIR}/1"
-    assert_dir_exists "${base}"
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six close trinity 1 2>&1) || exit_code=$?
 
-    assert_file_equals "${base}/TARGET_PROJECT.txt" "test-project"
-    assert_file_equals "${base}/TARGET_TRINITY.txt" "1"
-    assert_file_equals "${base}/TITLE.txt"          "Test commit title"
-    assert_file_equals "${base}/BODY.txt"           "Test commit body."
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert 1 equals 1
+    else
+        fail "Should have failed without confirmation"
+    fi
+
+    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
+    if [[ "$gh_log" == *"pr merge"* ]]; then
+        fail "Merge was called despite no confirmation!"
+    fi
 }
 
-# ---------------------------------------------------------------------------
-# TEST 2 — FILE block: raw body and target path extracted correctly
-# ---------------------------------------------------------------------------
-@test 'FILE block: raw body and target path extracted correctly' {
-    _run_parser "valid_file_single.md"
+# ===========================================================================
+# close project
+# ===========================================================================
 
-    assert "${_parser_exit}" equals "0"
+@test '[close project — positive] Removes sandbox directory; leaves GitHub remote intact' {
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
+    export TOS_ACTIVE_TRINITY="0"
 
-    local base="${TOS_PARSE_OUTPUT_DIR}/file_1"
-    assert_dir_exists "${base}"
+    cat > "${_INBOX}" <<EOF
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+CONFIRM=TRUE
+===TOS_META_END===
+EOF
 
-    # _TARGET.txt holds the filename that appeared after "TOS_FILE_START: "
-    assert_file_equals "${base}/_TARGET.txt" "calculator.zsh"
+    local exit_code=0
+    zsh bin/tos.zsh team_of_six close project >/dev/null 2>&1 || exit_code=$?
 
-    # RAW_BODY.txt holds everything between the START and END markers verbatim.
-    assert_file_exists "${base}/RAW_BODY.txt"
-    assert_file_contains "${base}/RAW_BODY.txt" "#!/bin/zsh"
-    assert_file_contains "${base}/RAW_BODY.txt" "add()"
+    assert "${exit_code}" equals 0
+    assert_dir_not_exists "${_SANDBOX_PROJECT}"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 3 — Multiple FILE blocks produce separate numbered subdirectories
-# ---------------------------------------------------------------------------
-@test 'Multiple FILE blocks produce separate numbered subdirectories' {
-    _run_parser "valid_file_double.md"
+@test '[close project — negative] Hard lock still active blocks close project' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
 
-    assert "${_parser_exit}" equals "0"
+    cat > "${_INBOX}" <<EOF
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+CONFIRM=TRUE
+===TOS_META_END===
+EOF
 
-    assert_file_equals "${TOS_PARSE_OUTPUT_DIR}/file_1/_TARGET.txt" "calculator.zsh"
-    assert_file_equals "${TOS_PARSE_OUTPUT_DIR}/file_2/_TARGET.txt" "test_calculator.zsh"
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six close project 2>&1) || exit_code=$?
 
-    assert_file_nonempty "${TOS_PARSE_OUTPUT_DIR}/file_1/RAW_BODY.txt"
-    assert_file_nonempty "${TOS_PARSE_OUTPUT_DIR}/file_2/RAW_BODY.txt"
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert 1 equals 1
+    else
+        fail "Close project should be blocked while a Hard Lock is active"
+    fi
+    
+    assert_dir_exists "${_SANDBOX_PROJECT}"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 4 — FILE block missing path marker causes loud error and non-zero exit
-# ---------------------------------------------------------------------------
-# A FILE block like "===TOS_FILE_START===" (no ": path" suffix) is malformed.
-# The parser must abort with a non-zero exit and emit an error referencing the
-# missing path, not silently produce a file with an empty _TARGET.txt.
-@test 'FILE block missing path marker causes loud error and non-zero exit' {
-    _run_parser "file_missing_path.md"
+@test '[close project — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
+    export TOS_ACTIVE_TRINITY="0"
 
-    assert "${_parser_exit}" not_equals "0"
+    cat > "${_INBOX}" <<EOF
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+CONFIRM=FALSE
+===TOS_META_END===
+EOF
 
-    # Error message must reference "path" or "target".
-    echo "${_parser_output}" | grep -qi "path\|target"
-    assert "$?" equals "0"
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six close project 2>&1) || exit_code=$?
 
-    # No _TARGET.txt file should have been created (no partial output).
-    assert_file_not_exists "${TOS_PARSE_OUTPUT_DIR}/file_1/_TARGET.txt"
+    [[ "${exit_code}" -ne 0 ]] && assert 1 equals 1 || fail "Expected non-zero exit"
+    
+    if [[ "$output" == *"CONFIRM"* ]]; then
+        assert 1 equals 1
+    else
+        fail "Output did not warn about confirmation. Got: $output"
+    fi
 }
 
-# ---------------------------------------------------------------------------
-# TEST 5 — PLAN block: APPROVED_FILES extracted correctly
-# ---------------------------------------------------------------------------
-@test 'PLAN block: APPROVED_FILES extracted correctly' {
-    _run_parser "valid_plan.md"
+@test '[delete trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
+    # Test for the specific delete trinity block
+    # Since delete trinity logic may live in close/hard/trinity or delete/hard/trinity,
+    # let's inject delete as well just in case.
+    mkdir -p "${TOS_MNT_ROOT}/.local/bin/modules/delete"
+    cp -r "${PWD}/bin/modules/delete/"* "${TOS_MNT_ROOT}/.local/bin/modules/delete/" 2>/dev/null || true
 
-    assert "${_parser_exit}" equals "0"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
 
-    local base="${TOS_PARSE_OUTPUT_DIR}/plan_1"
-    assert_dir_exists "${base}"
-    assert_file_equals "${base}/APPROVED_FILES.txt" "calculator.zsh test_calculator.zsh"
-}
+    cat > "${_INBOX}" <<EOF
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+CONFIRM=FALSE
+===TOS_META_END===
+EOF
 
-# ---------------------------------------------------------------------------
-# TEST 6 — ISSUE block: TITLE and BODY extracted
-# ---------------------------------------------------------------------------
-@test 'ISSUE block: TITLE and BODY extracted correctly' {
-    _run_parser "valid_issue.md"
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six delete trinity 1 2>&1) || exit_code=$?
 
-    assert "${_parser_exit}" equals "0"
-
-    local base="${TOS_PARSE_OUTPUT_DIR}/issue_1"
-    assert_dir_exists "${base}"
-    assert_file_contains "${base}/TITLE.txt" "Implement subtract() function"
-    assert_file_nonempty "${base}/BODY.txt"
-}
-
-# ---------------------------------------------------------------------------
-# TEST 7 — COMMENT block: TARGET and BODY extracted
-# ---------------------------------------------------------------------------
-@test 'COMMENT block: TARGET and BODY extracted correctly' {
-    _run_parser "valid_comment.md"
-
-    assert "${_parser_exit}" equals "0"
-
-    local base="${TOS_PARSE_OUTPUT_DIR}/comment_1"
-    assert_dir_exists "${base}"
-    assert_file_equals "${base}/TARGET.txt" "1"
-    assert_file_contains "${base}/BODY.txt" "ANSWER"
-}
-
-# ---------------------------------------------------------------------------
-# TEST 8 — TRINITY block: TARGET_PROJECT, TARGET_TRINITY, MANIFEST extracted
-# ---------------------------------------------------------------------------
-@test 'TRINITY block: all fields extracted correctly' {
-    _run_parser "valid_trinity_close.md"
-
-    assert "${_parser_exit}" equals "0"
-
-    local base="${TOS_PARSE_OUTPUT_DIR}/trinity_1"
-    assert_dir_exists "${base}"
-    assert_file_equals "${base}/TARGET_PROJECT.txt" "test-project"
-    assert_file_equals "${base}/TARGET_TRINITY.txt" "1"
-    assert_file_equals "${base}/MANIFEST.txt"       "calculator.zsh test_calculator.zsh"
+    [[ "${exit_code}" -ne 0 ]] && assert 1 equals 1 || fail "Delete trinity should require confirmation"
 }

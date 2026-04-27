@@ -33,10 +33,10 @@
     _FIXTURES="${PWD}/tests/fixtures/payloads"
 
     # delete project is a soft/ module — soft lock context.
-    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
 
-    _SANDBOX_PROJECT="${TOS_SANDBOX}/test_architect/test-project"
+    _SANDBOX_PROJECT="${TOS_SANDBOX}/test_architect/team_of_six"
     mkdir -p "${_SANDBOX_PROJECT}"
 }
 
@@ -48,10 +48,10 @@
 # TEST 1 — Positive: MFA escalation called before repo delete; scope revoked after
 # ---------------------------------------------------------------------------
 @test '[delete project — positive] PAT MFA escalation before delete; scope revoked in EXIT trap' {
-    scaffold_write_inbox "${_FIXTURES}/meta_confirm_true.md"
+    scaffold_write_inbox "${_FIXTURES}/meta_confirm_zero.md"
 
     local exit_code
-    zsh bin/tos.zsh test-project delete project 2>&1
+    zsh bin/tos.zsh team_of_six delete project 2>&1
     exit_code=$?
 
     assert "${exit_code}" equals "0"
@@ -78,13 +78,13 @@
 # failure. This is the critical security property: even if the repo delete
 # command errors out, the elevated scope is removed.
 @test '[delete project — negative] Scope revocation fires even when repo delete fails' {
-    scaffold_write_inbox "${_FIXTURES}/meta_confirm_true.md"
+    scaffold_write_inbox "${_FIXTURES}/meta_confirm_zero.md"
 
     # Make the `gh repo delete` call fail.
     export TOS_MOCK_GH_EXIT_repo="1"
 
     local exit_code
-    zsh bin/tos.zsh test-project delete project 2>&1
+    zsh bin/tos.zsh team_of_six delete project 2>&1
     exit_code=$?
 
     # Overall exit must be non-zero (the delete failed).
@@ -100,7 +100,7 @@
 @test '[delete project — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
-TARGET_PROJECT=test-project
+TARGET_PROJECT=team_of_six
 TARGET_TRINITY=0
 TITLE=Delete project
 BODY=Confirm is missing.
@@ -108,7 +108,7 @@ BODY=Confirm is missing.
 PAYLOAD
 
     local output exit_code
-    output=$(zsh bin/tos.zsh test-project delete project 2>&1)
+    output=$(zsh bin/tos.zsh team_of_six delete project 2>&1)
     exit_code=$?
 
     assert "${exit_code}" not_equals "0"

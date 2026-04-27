@@ -1,17 +1,20 @@
 #!/bin/zsh
-# ==============================================================================
-# Title: Lock Release
-# Usage: release.zsh <project>
-#
-# Releases all locks owned by this Architect for the given project.
-# ==============================================================================
+PROJECT_NAME="$1"
+GLOBAL_LOCKS="${TOS_LOCKS:-$TOS_MNT_ROOT/.ipc/locks}"
+LOCK_FOUND=false
 
-PROJECT=$1
-
-GLOBAL_LOCKS="$TOS_MNT_ROOT/.ipc/locks"
-
-for file in "$GLOBAL_LOCKS/${PROJECT}_trinity_"*.lock(N); do
-    if [[ -f "$file" ]] && grep -q "$SUDO_USER" "$file"; then
-        rm -f "$file"
+# The (N) qualifier tells zsh not to crash if no files are found
+for file in "$GLOBAL_LOCKS/${PROJECT_NAME}_trinity_"*.lock(N); do
+    [[ -f "$file" ]] || continue
+    LOCK_FOUND=true
+    if grep -q "^${SUDO_USER}:" "$file"; then
+        rm -f "$file" "${file%.lock}.manifest"
+        echo "🔓 Lock released for $PROJECT_NAME."
+        exit 0
+    else
+        echo "🚨 [ERROR] Cannot release lock owned by another architect." >&2
+        exit 1
     fi
 done
+
+[[ "$LOCK_FOUND" == "false" ]] && exit 0

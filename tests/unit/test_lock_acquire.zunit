@@ -2,29 +2,14 @@
 # =============================================================================
 # test/unit/test_lock_acquire.zunit
 # =============================================================================
-# WHAT IS TESTED
-#   bin/utils/lock/acquire.zsh — the script that creates a lock file under
-#   TOS_LOCKS/ to claim ownership of a project-trinity slot.
-#
-# LOCK FILE FORMAT
-#   A lock file is named:  <project>_trinity_<N>.lock
-#   Its content is:        <architect_username>:<LOCK_TYPE>
-#   where LOCK_TYPE is SOFT_LOCK (trinity 0) or HARD_LOCK (trinity > 0).
-#
-# WHY LOCKING MATTERS (ADR 2 — Contextual Trinity)
-#   The 1:1:1 constraint (one architect, one project, one trinity at a time)
-#   is enforced purely by the presence or absence of lock files. If two
-#   architects could acquire the same hard lock simultaneously, the
-#   Contextual Trinity guarantee would be violated.
-#
-# INVOCATION CONVENTION (assumed)
-#   acquire.zsh <project> <trinity_number> <architect_username>
-# =============================================================================
 
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
+    
+    # Standard safety for all utility tests
+    export TOS_CONTEXT="/dev/null"
 }
 
 @teardown {
@@ -34,15 +19,13 @@
 # ---------------------------------------------------------------------------
 # TEST 1 — Soft lock acquisition writes correct lock file (trinity 0)
 # ---------------------------------------------------------------------------
-# Trinity 0 always uses a SOFT_LOCK. The lock file must be created with the
-# right name and exactly the right content.
 @test 'Soft lock acquisition writes correct lock file' {
-    zsh bin/utils/lock/acquire.zsh "test-project" "0" "test_architect"
+    zsh bin/utils/lock/acquire.zsh "team_of_six" "0" "test_architect"
     local exit_code=$?
 
     assert "${exit_code}" equals "0"
 
-    local lock_file="${TOS_LOCKS}/test-project_trinity_0.lock"
+    local lock_file="${TOS_LOCKS}/team_of_six_trinity_0.lock"
     assert_file_exists "${lock_file}"
     assert_file_equals "${lock_file}" "test_architect:SOFT_LOCK"
 }
@@ -50,14 +33,13 @@
 # ---------------------------------------------------------------------------
 # TEST 2 — Hard lock acquisition writes correct lock file (trinity > 0)
 # ---------------------------------------------------------------------------
-# Any trinity number greater than 0 produces a HARD_LOCK.
 @test 'Hard lock acquisition writes correct lock file' {
-    zsh bin/utils/lock/acquire.zsh "test-project" "1" "test_architect"
+    zsh bin/utils/lock/acquire.zsh "team_of_six" "1" "test_architect"
     local exit_code=$?
 
     assert "${exit_code}" equals "0"
 
-    local lock_file="${TOS_LOCKS}/test-project_trinity_1.lock"
+    local lock_file="${TOS_LOCKS}/team_of_six_trinity_1.lock"
     assert_file_exists "${lock_file}"
     assert_file_equals "${lock_file}" "test_architect:HARD_LOCK"
 }
@@ -65,43 +47,43 @@
 # ---------------------------------------------------------------------------
 # TEST 3 — Hard lock contention: second architect cannot acquire occupied slot
 # ---------------------------------------------------------------------------
-# If architect_b already holds a HARD_LOCK on trinity 1, architect_a must be
-# refused. The lock file content must remain unchanged (not overwritten).
-#
-# This test enforces the multi-tenant isolation requirement from the gap
-# analysis (Section 0 of the concept doc).
 @test 'Hard lock contention: second architect is blocked from occupied trinity' {
     # Pre-seed a lock held by architect_b.
-    echo "architect_b:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    echo "architect_b:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 
     # architect_a now tries to acquire the same slot.
-    local output exit_code
-    output=$(zsh bin/utils/lock/acquire.zsh "test-project" "1" "architect_a" 2>&1)
-    exit_code=$?
+    local output
+    local exit_code=0
+    # Use || exit_code=$? to prevent ZUnit from killing the test on the expected error
+    output=$(zsh bin/utils/lock/acquire.zsh "team_of_six" "1" "architect_a" 2>&1) || exit_code=$?
 
     # Must fail.
-    assert "${exit_code}" not_equals "0"
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert "1" equals "1"
+    else
+        fail "Expected non-zero exit code on lock contention. Output: ${output}"
+    fi
 
     # Lock content must still belong to architect_b — not overwritten.
-    assert_file_equals "${TOS_LOCKS}/test-project_trinity_1.lock" "architect_b:HARD_LOCK"
+    assert_file_equals "${TOS_LOCKS}/team_of_six_trinity_1.lock" "architect_b:HARD_LOCK"
 
     # Output must reference contention.
-    echo "${output}" | grep -qi "contention\|already held\|locked\|occupied"
-    assert "$?" equals "0"
+    if echo "${output}" | grep -qi "contention\|already held\|locked\|occupied"; then
+        assert "1" equals "1"
+    else
+        fail "Did not find contention message in output. Output: ${output}"
+    fi
 }
 
 # ---------------------------------------------------------------------------
 # TEST 4 — Soft lock re-acquisition by same architect is idempotent
 # ---------------------------------------------------------------------------
-# Acquiring a SOFT_LOCK that the same architect already holds should succeed
-# without error (idempotent behaviour). This allows `sync project` to be
-# retried safely.
 @test 'Soft lock re-acquisition by same architect is idempotent' {
     # Pre-seed with own lock.
-    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
 
     # Acquire again — must not fail.
-    zsh bin/utils/lock/acquire.zsh "test-project" "0" "test_architect"
+    zsh bin/utils/lock/acquire.zsh "team_of_six" "0" "test_architect"
     local exit_code=$?
 
     assert "${exit_code}" equals "0"

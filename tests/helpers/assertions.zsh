@@ -82,7 +82,7 @@ function assert_file_contains() {
     fi
     echo "ASSERT FAIL: '${substring}' not found in ${path}" >&2
     echo "  File contents:" >&2
-    cat "${path}" | sed 's/^/    /' >&2
+    while IFS= read -r line; do echo "    $line"; done < "${path}" >&2
     return 1
 }
 
@@ -117,7 +117,7 @@ function assert_file_equals() {
         return 1
     fi
     local actual
-    actual=$(cat "${path}")
+    actual=$(<"${path}")
     if [[ "${actual}" == "${expected}" ]]; then
         return 0
     fi

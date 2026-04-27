@@ -90,7 +90,7 @@
         trap "unset GH_TOKEN" EXIT
         # Simulated error exit (e.g. invalid command, SEC-FAULT).
         exit 1
-    )
+    ) || true   # subshell non-zero exit is expected — don't abort the test
 
     local parent_value="${GH_TOKEN:-UNSET}"
     assert "${parent_value}" equals "UNSET"
@@ -106,12 +106,16 @@
     local output
     output=$(
         TOS_CONTROLLER_LOCKED=true \
-        zsh bin/tos.zsh test-project nonexistent command 2>&1
-    )
-
-    # The token must not appear anywhere in stdout or stderr.
-    echo "${output}" | grep -qF "FAKE_GH_TOKEN"
-    local found=$?
-    # grep returns 0 if found — we want it NOT found (non-zero).
+        zsh bin/tos.zsh team_of_six nonexistent command 2>&1
+    ) || true
+	# The token must not appear anywhere in stdout or stderr.
+    # We use an if-statement to catch grep's exit code without triggering set -e
+    local found
+    if echo "${output}" | grep -qF "FAKE_GH_TOKEN"; then
+        found=0
+    else
+        found=1
+    fi
+    
     assert "${found}" equals "1"
 }

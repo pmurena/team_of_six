@@ -1,5 +1,5 @@
 ===TOS_META_START===
-TARGET_PROJECT=test-project
+TARGET_PROJECT=team_of_six
 TARGET_TRINITY=1
 TITLE=Path traversal attempt
 BODY=Should be rejected.

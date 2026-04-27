@@ -1,15 +1,4 @@
 #!/bin/zsh
-# ==============================================================================
-# Title: The Code Publisher
-# Usage: tos <project> write code
-#
-# Hallucination control and lock verification are enforced by the gateway
-# (bin/tos) before this module is ever reached. This module is a dumb executor:
-#
-# Stage 1 — Metadata: extracts the single META block (TITLE + BODY).
-# Stage 2 — Files: extracts all FILE blocks and overwrites sandbox targets.
-# Stage 3 — Publish: commits and pushes; creates/updates the PR.
-# ==============================================================================
 [[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
 [[ ! -s "$TOS_INPUT" ]] && exit 1
 
@@ -21,7 +10,6 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
     echo "🚨 ERROR: Not on a tos-work-# branch."
     exit 1
 }
-# TOS_ACTIVE_TRINITY is exported by the gateway — use it directly
 ACTIVE_TRINITY="${TOS_ACTIVE_TRINITY:-${match[1]}}"
 
 META_DIR="$TOS_PARSE_DIR/meta"
@@ -61,6 +49,13 @@ if [[ ${#FILE_ITEMS[@]} -gt 0 ]]; then
             exit 1
         fi
 
+        # [SECURITY] Manifest Visa Verification (ADR 9)
+        MANIFEST_FILE="$TOS_MNT_ROOT/.ipc/locks/${TOS_ACTIVE_PROJECT}_trinity_${ACTIVE_TRINITY}.manifest"
+        if ! grep -qF "$FILE_PATH" "$MANIFEST_FILE" 2>/dev/null; then
+            echo "🚨 SEC-FAULT: File '$FILE_PATH' is not authorized by the manifest visa."
+            exit 1
+        fi
+
         echo "📝 Overwriting: $FILE_PATH"
         mkdir -p "$(dirname "$FILE_PATH")"
         cat "$item_dir/RAW_BODY.txt" > "$FILE_PATH"
@@ -79,17 +74,20 @@ PR_TITLE="[Ghost] Trinity #${ACTIVE_TRINITY}: $TITLE"
 git add .
 git commit -m "$TITLE\n\n$BODY\n\nFixes #$ACTIVE_TRINITY"
 
-if git push origin "$CURRENT_BRANCH" --force-with-lease; then
-    if gh pr view "$CURRENT_BRANCH" &>/dev/null; then
-        gh pr edit "$CURRENT_BRANCH" --title "$PR_TITLE" --body "$BODY"
-    else
-        gh pr create --title "$PR_TITLE" --body "$BODY" --head "$CURRENT_BRANCH"
-    fi
+# --- ARCHITECTURE FIX: Abort immediately if push fails ---
+git push origin "$CURRENT_BRANCH" --force-with-lease || {
+    echo "🚨 FATAL: Push failed. Halting publication." >&2
+    exit 1
+}
+
+if gh pr view "$CURRENT_BRANCH" &>/dev/null; then
+    gh pr edit "$CURRENT_BRANCH" --title "$PR_TITLE" --body "$BODY"
+else
+    gh pr create --title "$PR_TITLE" --body "$BODY" --head "$CURRENT_BRANCH"
 fi
 
 echo "🏁 CODE WRITE COMPLETE"
 
-# === JOURNAL: Record committed files into the outbox ===
 echo ""
 echo "## GHOST COMMITTED: Trinity #${ACTIVE_TRINITY} — $TITLE"
 echo "Branch: $CURRENT_BRANCH"
@@ -104,6 +102,3 @@ if [[ ${#FILE_ITEMS[@]} -gt 0 ]]; then
 		echo ""
 	done
 fi
-
-# --- Context Note ---
-# The Outbox is ephemeral. The Architect must explicitely 'sync peek' or 'sync trinity' to refresh context after writing.

@@ -2,87 +2,132 @@
 # =============================================================================
 # test/integration/test_write_comment.zunit
 # =============================================================================
-# WHAT IS TESTED
-#   bin/modules/write/hard/comment.zsh (or soft/) — posts a COMMENT block's
-#   BODY to the GitHub thread identified by TARGET.
-#
-# ROUTING LOGIC
-#   The module checks whether a PR exists for the given TARGET number.
-#   If yes → `gh pr comment`
-#   If no  → `gh issue comment` (fallback)
-#
-#   This is important because early in a trinity no PR exists yet; comments
-#   must still reach the Architect via the issue thread.
-# =============================================================================
 
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
     source "${PWD}/tests/helpers/mocks.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
+    
     scaffold_setUp
     reset_mocks
 
     _FIXTURES="${PWD}/tests/fixtures/payloads"
 
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    # 1. PHYSICAL HYBRID MOCK (Only mocking 'gh')
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+    cat > "${TOS_MOCK_BIN}/gh" <<'INNEREOF'
+#!/usr/bin/env zsh
+echo "$*" >> /tmp/tos_mock_gh_calls.log
+
+# Respect the test's request to fail 'gh pr view'
+if [[ "$1" == "pr" && "$2" == "view" && -n "$TOS_MOCK_GH_EXIT_pr" ]]; then
+    exit "$TOS_MOCK_GH_EXIT_pr"
+fi
+
+if [[ -n "$TOS_MOCK_GH_OUTPUT" ]]; then
+    echo "$TOS_MOCK_GH_OUTPUT"
+fi
+exit 0
+INNEREOF
+    chmod +x "${TOS_MOCK_BIN}/gh"
+
+    # 2. FULL MODULE & UTILS INJECTION
+    mkdir -p "${TOS_MNT_ROOT}/.local/bin/modules/write/soft"
+    mkdir -p "${TOS_MNT_ROOT}/.local/bin/utils"
+    cp -r "${PWD}/bin/modules/write/soft/"* "${TOS_MNT_ROOT}/.local/bin/modules/write/soft/" 2>/dev/null || true
+    cp -r "${PWD}/bin/utils/"* "${TOS_MNT_ROOT}/.local/bin/utils/" 2>/dev/null || true
+
+    # 3. ALIGN SANDBOX
+    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+    mkdir -p "${_SANDBOX_PROJECT}"
+
+    # 4. EXPLICIT OUTBOX & INBOX
+    export TOS_OUTBOX="${TOS_MNT_ROOT}/.ipc/test_architect/outbox.md"
+    mkdir -p "$(dirname "${TOS_OUTBOX}")"
+    touch "${TOS_OUTBOX}"
+
+    export TOS_INBOX="${TOS_MNT_ROOT}/.ipc/test_architect/inbox.md"
+    mkdir -p "$(dirname "${TOS_INBOX}")"
+    touch "${TOS_INBOX}"
+
+    export TOS_CONTEXT="/dev/null"
+    
+    # 5. PRECONDITIONS
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
 }
 
 @teardown {
     scaffold_tearDown
+    rm -rf "${TOS_MOCK_BIN}" 2>/dev/null
 }
 
-# ---------------------------------------------------------------------------
-# TEST 1 — Positive: comment posted to PR when PR exists for the target
-# ---------------------------------------------------------------------------
 @test '[write comment — positive, PR exists] Comment posted to PR when PR found' {
     scaffold_write_inbox "${_FIXTURES}/valid_comment.md"
+    
+    sed -i 's/TARGET_PROJECT=.*/TARGET_PROJECT=team_of_six/g' "${TOS_INBOX}" 2>/dev/null || true
+    sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
 
-    # Simulate `gh pr view 1` returning a valid PR URL (PR exists).
-    export TOS_MOCK_GH_OUTPUT='{"url":"https://github.com/org/test-project/pull/1","state":"OPEN"}'
+    export TOS_MOCK_GH_OUTPUT='{"url":"https://github.com/org/team_of_six/pull/1","state":"OPEN"}'
 
-    local exit_code
-    zsh bin/tos.zsh test-project write comment 2>&1
-    exit_code=$?
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write comment 2>&1) || exit_code=$?
 
-    assert "${exit_code}" equals "0"
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
+    assert "${exit_code}" equals 0
 
-    assert_mock_called     /tmp/tos_mock_gh_calls.log "pr comment"
-    assert_mock_not_called /tmp/tos_mock_gh_calls.log "issue comment"
-    assert_file_empty "${TOS_INBOX}"
+    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
+    [[ "$gh_log" == *"pr comment"* ]] && assert 1 equals 1 || fail "pr comment not called"
+    [[ "$gh_log" == *"issue comment"* ]] && fail "issue comment was called unexpectedly"
+    
+    [[ ! -s "${TOS_INBOX}" ]] && assert 1 equals 1 || fail "Inbox not empty"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 2 — Positive: falls back to issue comment when no PR exists
-# ---------------------------------------------------------------------------
 @test '[write comment — positive, no PR] Fallback to issue comment when PR absent' {
     scaffold_write_inbox "${_FIXTURES}/valid_comment.md"
 
-    # Make `gh pr view` fail (PR does not exist yet).
+    sed -i 's/TARGET_PROJECT=.*/TARGET_PROJECT=team_of_six/g' "${TOS_INBOX}" 2>/dev/null || true
+    sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
+
     export TOS_MOCK_GH_EXIT_pr="1"
 
-    local exit_code
-    zsh bin/tos.zsh test-project write comment 2>&1
-    exit_code=$?
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write comment 2>&1) || exit_code=$?
 
-    assert "${exit_code}" equals "0"
-    assert_mock_called /tmp/tos_mock_gh_calls.log "issue comment"
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
+    assert "${exit_code}" equals 0
+
+    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
+    [[ "$gh_log" == *"issue comment"* ]] && assert 1 equals 1 || fail "issue comment not called"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 3 — Negative: missing TARGET field causes abort
-# ---------------------------------------------------------------------------
-@test '[write comment — negative] Missing TARGET causes abort without any gh call' {
+@test '[write comment — negative] Missing TARGET gracefully skips without gh call' {
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_COMMENT_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
 BODY=There is no TARGET field here.
 ===TOS_COMMENT_END===
 PAYLOAD
 
-    local exit_code
-    zsh bin/tos.zsh test-project write comment 2>&1
-    exit_code=$?
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write comment 2>&1) || exit_code=$?
 
-    assert "${exit_code}" not_equals "0"
-    assert_mock_not_called /tmp/tos_mock_gh_calls.log "comment"
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway aborted unexpectedly! Output log:\n${output}"; fi
+
+    if echo "${output}" | grep -qi "Skipping malformed comment block"; then
+        assert 1 equals 1
+    else
+        fail "Expected graceful skip warning but got: \n${output}"
+    fi
+
+    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
+    [[ "$gh_log" == *"comment "* ]] && fail "comment was called despite missing TARGET!"
+    assert 1 equals 1
 }

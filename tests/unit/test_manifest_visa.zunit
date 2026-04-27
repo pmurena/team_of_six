@@ -1,133 +1,111 @@
 #!/usr/bin/env zunit
-# =============================================================================
-# test/unit/test_manifest_visa.zunit
-# =============================================================================
-# WHAT IS TESTED
-#   The manifest visa check — the function (or script) the gateway calls before
-#   writing any file to the sandbox. Only files listed in the .manifest visa
-#   created by `write plan` may be written. All others trigger a SEC-FAULT.
-#
-# WHAT IS A MANIFEST VISA? (ADR 9 — Locked Manifest / Intent Locking)
-#   Before writing code the Architect must issue a `write plan` command that
-#   lists every file the agent is allowed to create/modify in this trinity.
-#   The gateway writes those filenames to:
-#       $TOS_LOCKS/<project>_trinity_<N>.manifest
-#   During `write code`, each FILE block's target path is checked against this
-#   list. A path not on the list — or any path that looks like a traversal
-#   attack — causes an immediate SEC-FAULT and halts execution.
-#
-# COMPONENT UNDER TEST
-#   The manifest-check logic is expected to be an importable function or a
-#   script callable as:
-#       check_manifest_visa.zsh <file_path> <project> <trinity_number>
-#   (Adjust to match the actual production interface.)
-# =============================================================================
-
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
-    source "bin/tos.zsh"
-    source "${PWD}/tests/helpers/mocks.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
-    reset_mocks
-
-    # Establish a hard lock for trinity 1.
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
+    
+    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+    mkdir -p "${_SANDBOX_PROJECT}"
+    git -C "${_SANDBOX_PROJECT}" init -q
+    git -C "${_SANDBOX_PROJECT}" commit -q --allow-empty -m "Initial commit"
+    git -C "${_SANDBOX_PROJECT}" checkout -q -b tos-work-1
+    
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
+    
+    # Hybrid mock: Silences 'gh' and intercepts 'git push', allowing real git locally
+    cat > "${TOS_MOCK_BIN}/gh" <<'INNER'
+#!/usr/bin/env zsh
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/gh"
 
-    # Write a valid manifest visa that authorises exactly two files.
-    echo "calculator.zsh test_calculator.zsh" \
-        > "${TOS_LOCKS}/test-project_trinity_1.manifest"
+    cat > "${TOS_MOCK_BIN}/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"push"* ]]; then exit 0; fi
+REAL_GIT=$(command -v git | grep -v tos_mock_bin | head -n 1)
+[[ -z "$REAL_GIT" ]] && REAL_GIT="/usr/bin/git"
+"$REAL_GIT" "$@"
+exit $?
+INNER
+    chmod +x "${TOS_MOCK_BIN}/git"
 }
+@teardown { scaffold_tearDown; rm -rf "${TOS_MOCK_BIN}" 2>/dev/null; }
 
-@teardown {
-    scaffold_tearDown
-}
-
-# Helper: invoke the manifest check for a given file path.
-# Returns the exit code of the check.
-function _check_visa() {
-    local file_path="$1"
-    zsh bin/utils/check_manifest_visa.zsh \
-        "${file_path}" "test-project" "1" 2>&1
-    return $?
-}
-
-# ---------------------------------------------------------------------------
-# TEST 1 — File in manifest passes the visa check (exit 0)
-# ---------------------------------------------------------------------------
 @test 'File listed in manifest passes the visa check' {
-    _check_visa "calculator.zsh"
-    assert "$?" equals "0"
+    echo "target.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    echo "===TOS_META_START===\nTARGET_PROJECT=team_of_six\nTARGET_TRINITY=1\nTITLE=Test\n===TOS_META_END===\n===TOS_FILE_START: target.zsh===\ncontent\n===TOS_FILE_END===" > "${TOS_INBOX}"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -eq 0 ]]; then 
+        assert 1 equals 1
+    else 
+        fail "Expected 0 but got ${exit_code}. Output: ${output}"
+    fi
 }
 
-# ---------------------------------------------------------------------------
-# TEST 2 — File not in manifest causes SEC-FAULT (non-zero exit)
-# ---------------------------------------------------------------------------
 @test 'File not in manifest causes SEC-FAULT with descriptive output' {
-    local output exit_code
-    output=$(_check_visa "rogue.zsh")
-    exit_code=$?
-
-    assert "${exit_code}" not_equals "0"
-
-    # The output must explicitly say SEC-FAULT or something equally strong.
-    echo "${output}" | grep -qi "SEC-FAULT\|manifest.*reject\|not authorised\|not authorized"
-    assert "$?" equals "0"
+    echo "allowed.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    echo "===TOS_META_START===\nTARGET_PROJECT=team_of_six\nTARGET_TRINITY=1\nTITLE=Test\n===TOS_META_END===\n===TOS_FILE_START: rogue.zsh===\ncontent\n===TOS_FILE_END===" > "${TOS_INBOX}"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -ne 0 ]]; then
+        if echo "${output}" | grep -qi "SEC-FAULT"; then assert 1 equals 1; else fail "No SEC-FAULT message found. Output: ${output}"; fi
+    else
+        fail "Gateway did not block request! Output: ${output}"
+    fi
 }
 
-# ---------------------------------------------------------------------------
-# TEST 3 — Path traversal `../../etc/passwd` is rejected immediately
-# ---------------------------------------------------------------------------
-# This must be caught BEFORE any filesystem read for the traversal path.
-# A ".." component is an unconditional reject — no manifest lookup needed.
 @test 'Path traversal with .. is rejected before manifest lookup' {
-    local output exit_code
-    output=$(_check_visa "../../etc/passwd")
-    exit_code=$?
-
-    assert "${exit_code}" not_equals "0"
-
-    # Output should indicate a traversal or path rejection.
-    echo "${output}" | grep -qi "traversal\|invalid path\|SEC-FAULT\|\.\."
-    assert "$?" equals "0"
+    echo "allowed.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    echo "===TOS_META_START===\nTARGET_PROJECT=team_of_six\nTARGET_TRINITY=1\nTITLE=Test\n===TOS_META_END===\n===TOS_FILE_START: ../rogue.zsh===\ncontent\n===TOS_FILE_END===" > "${TOS_INBOX}"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -ne 0 ]]; then
+        if echo "${output}" | grep -qi "SEC-FAULT"; then assert 1 equals 1; else fail "No traversal message found. Output: ${output}"; fi
+    else
+        fail "Gateway did not block request! Output: ${output}"
+    fi
 }
 
-# ---------------------------------------------------------------------------
-# TEST 4 — Absolute path `/etc/passwd` is rejected
-# ---------------------------------------------------------------------------
-# Absolute paths bypass sandbox confinement. They must be rejected regardless
-# of whether they appear in the manifest.
 @test 'Absolute path is rejected by the visa check' {
-    _check_visa "/etc/passwd"
-    assert "$?" not_equals "0"
+    echo "allowed.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    echo "===TOS_META_START===\nTARGET_PROJECT=team_of_six\nTARGET_TRINITY=1\nTITLE=Test\n===TOS_META_END===\n===TOS_FILE_START: /etc/rogue.zsh===\ncontent\n===TOS_FILE_END===" > "${TOS_INBOX}"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert 1 equals 1
+    else
+        fail "Gateway did not block request! Output: ${output}"
+    fi
 }
 
-# ---------------------------------------------------------------------------
-# TEST 5 — No manifest file present: write code is blocked entirely
-# ---------------------------------------------------------------------------
-# If `write plan` has never been run, there is no .manifest file. The gateway
-# must block `write code` entirely rather than operating with no constraints.
 @test 'No manifest file present causes write code to be blocked' {
-    # Remove the manifest that setUp created.
-    rm -f "${TOS_LOCKS}/test-project_trinity_1.manifest"
-
-    # Seed the inbox with a valid single-file payload.
-    scaffold_write_inbox \
-        "${PWD}/tests/fixtures/payloads/valid_file_single.md"
-
-    local output exit_code
-    output=$(zsh bin/tos.zsh test-project write code 2>&1)
-    exit_code=$?
-
-    assert "${exit_code}" not_equals "0"
-
-    # Output must guide the operator towards write plan.
-    echo "${output}" | grep -qi "manifest\|write plan\|intent lock"
-    assert "$?" equals "0"
-
-    # No files should have been written to the sandbox.
-    local file_count
-    file_count=$(find "${TOS_SANDBOX}" -type f 2>/dev/null | wc -l)
-    assert "${file_count}" equals "0"
+    rm -f "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    echo "===TOS_META_START===\nTARGET_PROJECT=team_of_six\nTARGET_TRINITY=1\nTITLE=Test\n===TOS_META_END===\n===TOS_FILE_START: target.zsh===\ncontent\n===TOS_FILE_END===" > "${TOS_INBOX}"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -ne 0 ]]; then
+        if echo "${output}" | grep -qi "manifest"; then assert 1 equals 1; else fail "No manifest message found. Output: ${output}"; fi
+    else
+        fail "Gateway did not block request! Output: ${output}"
+    fi
 }

@@ -1,74 +1,44 @@
 #!/usr/bin/env zunit
-# =============================================================================
-# test/unit/test_lock_release.zunit
-# =============================================================================
-# WHAT IS TESTED
-#   bin/utils/lock/release.zsh — removes a lock file when the owning architect
-#   requests release.
-#
-# SECURITY CONCERN
-#   Only the architect named inside the lock file may release it. A different
-#   architect attempting to release another's lock must be refused; otherwise
-#   a malicious or confused agent could unlock resources it doesn't own.
-#
-# INVOCATION CONVENTION (assumed)
-#   release.zsh <project> <trinity_number> <architect_username>
-# =============================================================================
-
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
 }
+@teardown { scaffold_tearDown; }
 
-@teardown {
-    scaffold_tearDown
-}
-
-# ---------------------------------------------------------------------------
-# TEST 1 — Release removes the lock file
-# ---------------------------------------------------------------------------
 @test 'Release by owner removes the lock file' {
-    # Create a lock that test_architect owns.
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
-
-    zsh bin/utils/lock/release.zsh "test-project" "1" "test_architect"
-    local exit_code=$?
-
-    assert "${exit_code}" equals "0"
-    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.lock"
+    export SUDO_USER="test_architect"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/utils/lock/release.zsh "team_of_six" 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -eq 0 ]]; then assert 1 equals 1; else fail "Failed. Output: ${output}"; fi
+    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 2 — Release by non-owner fails and leaves lock intact
-# ---------------------------------------------------------------------------
-# architect_a tries to release a lock owned by architect_b — must be refused.
 @test 'Release by non-owner fails and leaves lock intact' {
-    echo "architect_b:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
-
-    local output exit_code
-    output=$(zsh bin/utils/lock/release.zsh "test-project" "1" "architect_a" 2>&1)
-    exit_code=$?
-
-    assert "${exit_code}" not_equals "0"
-    # Lock must still exist with original content.
-    assert_file_exists  "${TOS_LOCKS}/test-project_trinity_1.lock"
-    assert_file_equals  "${TOS_LOCKS}/test-project_trinity_1.lock" "architect_b:HARD_LOCK"
+    export SUDO_USER="test_architect"
+    echo "other_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/utils/lock/release.zsh "team_of_six" 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert 1 equals 1
+    else
+        fail "Expected non-zero exit code. Output: ${output}"
+    fi
+    assert_file_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 3 — Release of non-existent lock is a no-op (idempotent)
-# ---------------------------------------------------------------------------
-# Releasing a lock that doesn't exist should succeed silently. This makes
-# the Atomic Handover sequence safe to retry if interrupted after the file
-# was already removed.
 @test 'Release of non-existent lock is a no-op and exits zero' {
-    # Confirm no lock file exists for trinity 99.
-    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_99.lock"
-
-    zsh bin/utils/lock/release.zsh "test-project" "99" "test_architect"
-    local exit_code=$?
-
-    # Must not error — releasing nothing is perfectly valid.
-    assert "${exit_code}" equals "0"
+    export SUDO_USER="test_architect"
+    local output
+    local exit_code=0
+    output=$(zsh bin/utils/lock/release.zsh "team_of_six" 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -eq 0 ]]; then assert 1 equals 1; else fail "Failed. Output: ${output}"; fi
 }

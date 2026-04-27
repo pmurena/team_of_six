@@ -2,23 +2,13 @@
 # =============================================================================
 # test/unit/test_lock_verify.zunit
 # =============================================================================
-# WHAT IS TESTED
-#   bin/utils/lock/verify.zsh — asserts that a specific architect holds a
-#   specific lock type on a specific project/trinity slot. Used by modules
-#   (e.g. write code, write trinity) as a pre-flight check before executing
-#   any side effects.
-#
-# INVOCATION CONVENTION (assumed)
-#   verify.zsh <project> <trinity_number> <architect_username> <expected_lock_type>
-#   e.g.  verify.zsh test-project 1 test_architect HARD_LOCK
-#
-# Returns 0 if all conditions match, non-zero otherwise.
-# =============================================================================
 
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
+    
+    export TOS_CONTEXT="/dev/null"
 }
 
 @teardown {
@@ -29,9 +19,9 @@
 # TEST 1 — Verify confirms a valid lock owned by this architect
 # ---------------------------------------------------------------------------
 @test 'Verify confirms a valid HARD_LOCK owned by the calling architect' {
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 
-    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK"
     assert "$?" equals "0"
 }
 
@@ -39,34 +29,47 @@
 # TEST 2 — Verify fails when lock is owned by a different architect
 # ---------------------------------------------------------------------------
 @test 'Verify fails when lock is owned by a different architect' {
-    echo "architect_b:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    echo "architect_b:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 
-    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
-    assert "$?" not_equals "0"
+    local exit_code=0
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK" || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert "1" equals "1"
+    else
+        fail "Expected verification to fail for different architect, but it passed."
+    fi
 }
 
 # ---------------------------------------------------------------------------
 # TEST 3 — Verify fails when lock type does not match
 # ---------------------------------------------------------------------------
-# The lock exists and the architect matches, but they hold SOFT_LOCK while
-# the caller requires HARD_LOCK. This protects hard/ modules from running
-# in a soft-lock context.
 @test 'Verify fails when lock type does not match expected' {
-    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 
-    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
-    assert "$?" not_equals "0"
+    local exit_code=0
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK" || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert "1" equals "1"
+    else
+        fail "Expected verification to fail for lock type mismatch, but it passed."
+    fi
 }
 
 # ---------------------------------------------------------------------------
 # TEST 4 — Verify fails when no lock file exists
 # ---------------------------------------------------------------------------
-# If there is no lock file at all, verification must fail. There is no lock
-# to verify against.
 @test 'Verify fails when no lock file exists for the given slot' {
     # Ensure clean state — no lock file.
-    assert_file_not_exists "${TOS_LOCKS}/test-project_trinity_1.lock"
+    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
 
-    zsh bin/utils/lock/verify.zsh "test-project" "1" "test_architect" "HARD_LOCK"
-    assert "$?" not_equals "0"
+    local exit_code=0
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK" || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert "1" equals "1"
+    else
+        fail "Expected verification to fail when no lock file exists, but it passed."
+    fi
 }

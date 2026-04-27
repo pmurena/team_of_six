@@ -173,3 +173,26 @@ function reset_mocks() {
         unset "${var}"
     done
 }
+
+# GLOBAL PHYSICAL MOCKS
+export TOS_MOCK_BIN="/tmp/tos_mock_bin"
+mkdir -p "$TOS_MOCK_BIN"
+export PATH="$TOS_MOCK_BIN:$PATH"
+
+cat > "$TOS_MOCK_BIN/gh" <<'INNER'
+#!/usr/bin/env zsh
+echo "$*" >> /tmp/tos_mock_gh_calls.log
+if [[ -n "$TOS_MOCK_GH_EXIT_repo" && "$*" == *"repo delete"* ]]; then exit "$TOS_MOCK_GH_EXIT_repo"; fi
+if [[ -n "$TOS_MOCK_GH_OUTPUT" ]]; then echo "$TOS_MOCK_GH_OUTPUT"; fi
+exit 0
+INNER
+chmod +x "$TOS_MOCK_BIN/gh"
+
+cat > "$TOS_MOCK_BIN/git" <<'INNER'
+#!/usr/bin/env zsh
+echo "$*" >> /tmp/tos_mock_git_calls.log
+if [[ "$*" == *"remote get-url origin"* ]]; then echo "https://github.com/org/${TOS_ACTIVE_PROJECT:-team_of_six}.git"; exit 0; fi
+if [[ "$*" == *"diff"* && -n "$TOS_MOCK_GIT_OUTPUT" ]]; then echo "$TOS_MOCK_GIT_OUTPUT"; exit 0; fi
+exit 0
+INNER
+chmod +x "$TOS_MOCK_BIN/git"

@@ -1,167 +1,78 @@
 #!/usr/bin/env zunit
-# =============================================================================
-# test/integration/test_inbox_truncation.zunit
-# =============================================================================
-# WHAT IS TESTED
-#   ADR 10 — Exact-Once Execution: the inbox is truncated to zero bytes BEFORE
-#   any irreversible side effect is performed.
-#
-# WHY THIS ORDER MATTERS
-#   TOS's gateway is intentionally stateless between invocations. The inbox IS
-#   the command queue. If the inbox were truncated AFTER the side effect:
-#     - A crash between side-effect and truncation → next invocation replays
-#       the same command → double-execution (e.g. two commits, two issues).
-#   If the inbox is truncated BEFORE the side effect:
-#     - A crash between truncation and side effect → the command is lost, but
-#       the operator can re-issue it manually (Out-of-Band Recovery, ADR 11).
-#   The second failure mode is always safer for a system that interfaces with
-#   an external service (GitHub).
-#
-# METHOD
-#   Each test uses a specialised git/gh mock that records the inbox size at
-#   the moment a key side-effecting call is made. If the inbox is already
-#   empty at that moment, ADR 10 is satisfied.
-#
-#   The ordering log is written to /tmp/tos_order.log by the mock.
-# =============================================================================
-
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
-
-    _FIXTURES="${PWD}/tests/fixtures/payloads"
-
-    # Hard lock + manifest for write code tests.
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_1.lock"
-    echo "calculator.zsh"           > "${TOS_LOCKS}/test-project_trinity_1.manifest"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    echo "calculator.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
     export TOS_ACTIVE_TRINITY="1"
-
-    # Soft lock for create issue tests.
-    # (We switch in the individual test by overwriting the lock file.)
-
-    mkdir -p "${TOS_SANDBOX}/test_architect/test-project"
     : > /tmp/tos_order.log
 }
+@teardown { scaffold_tearDown; rm -f /tmp/tos_order.log; }
 
-@teardown {
-    scaffold_tearDown
-    rm -f /tmp/tos_order.log 2>/dev/null
-}
-
-# ---------------------------------------------------------------------------
-# TEST 1 — Inbox is truncated before `git commit` in write code
-# ---------------------------------------------------------------------------
 @test 'Inbox truncated before git commit in write code (ADR 10)' {
-    scaffold_write_inbox "${_FIXTURES}/valid_file_single.md"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+===TOS_META_END===
+===TOS_FILE_START: test.zsh===
+content
+===TOS_FILE_END===
+PAYLOAD
 
-    # Define a git mock that records the inbox size at commit time.
-    # This override must be done in the same shell that sources the gateway.
-    # We achieve this by wrapping the gateway call in a script that redefines
-    # `git` before invoking tos.zsh.
-    local wrapper
-    wrapper=$(mktemp /tmp/tos_wrapper_XXXXXX.zsh)
-    cat > "${wrapper}" <<WRAPPER
-#!/bin/zsh
-# Redefine git so it spies on the inbox size at commit time.
-function git() {
-    echo "\$*" >> /tmp/tos_mock_git_calls.log
-    if [[ "\$*" == *commit* ]]; then
-        local inbox_size
-        inbox_size=\$(wc -c < "${TOS_INBOX}")
-        echo "INBOX_SIZE_AT_COMMIT=\${inbox_size}" >> /tmp/tos_order.log
-    fi
-    return 0
-}
-# Also stub gh.
-function gh() {
-    echo "\$*" >> /tmp/tos_mock_gh_calls.log
-    return 0
-}
-export TOS_CONTROLLER_LOCKED=true
-source bin/tos.zsh test-project write code
-WRAPPER
-    chmod +x "${wrapper}"
+    cat > "$TOS_MOCK_BIN/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *commit* ]]; then
+    echo "INBOX_SIZE_AT_COMMIT=$(wc -c < "$TOS_INBOX")" >> /tmp/tos_order.log
+fi
+INNER
+    chmod +x "$TOS_MOCK_BIN/git"
 
-    zsh "${wrapper}" 2>&1
-    rm -f "${wrapper}"
-
-    # The order log must say inbox was empty at commit time.
+    zsh bin/tos.zsh team_of_six write code 2>&1
     assert_file_contains /tmp/tos_order.log "INBOX_SIZE_AT_COMMIT=0"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 2 — Inbox is truncated before `gh issue create` in create issue
-# ---------------------------------------------------------------------------
 @test 'Inbox truncated before gh issue create in create issue (ADR 10)' {
-    # Switch to soft lock context for create issue.
-    rm -f "${TOS_LOCKS}/test-project_trinity_1.lock"
-    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
+    
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_ISSUE_START===
+TITLE=Truncation test
+===TOS_ISSUE_END===
+PAYLOAD
 
-    scaffold_write_inbox "${_FIXTURES}/valid_issue.md"
+    cat > "$TOS_MOCK_BIN/gh" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"issue create"* ]]; then
+    echo "INBOX_SIZE_AT_ISSUE_CREATE=$(wc -c < "$TOS_INBOX")" >> /tmp/tos_order.log
+fi
+INNER
+    chmod +x "$TOS_MOCK_BIN/gh"
 
-    local wrapper
-    wrapper=$(mktemp /tmp/tos_wrapper_XXXXXX.zsh)
-    cat > "${wrapper}" <<WRAPPER
-#!/bin/zsh
-function gh() {
-    echo "\$*" >> /tmp/tos_mock_gh_calls.log
-    if [[ "\$*" == *"issue create"* ]]; then
-        local inbox_size
-        inbox_size=\$(wc -c < "${TOS_INBOX}")
-        echo "INBOX_SIZE_AT_ISSUE_CREATE=\${inbox_size}" >> /tmp/tos_order.log
-    fi
-    echo '{"number":1}'
-    return 0
-}
-function git() { echo "\$*" >> /tmp/tos_mock_git_calls.log; return 0; }
-export TOS_CONTROLLER_LOCKED=true
-source bin/tos.zsh test-project create issue
-WRAPPER
-    chmod +x "${wrapper}"
-
-    zsh "${wrapper}" 2>&1
-    rm -f "${wrapper}"
-
+    zsh bin/tos.zsh team_of_six create issue 2>&1
     assert_file_contains /tmp/tos_order.log "INBOX_SIZE_AT_ISSUE_CREATE=0"
 }
 
-# ---------------------------------------------------------------------------
-# TEST 3 — Inbox is truncated before `gh pr merge` in close trinity
-# ---------------------------------------------------------------------------
 @test 'Inbox truncated before gh pr merge in close trinity (ADR 10)' {
-    scaffold_write_inbox "${_FIXTURES}/meta_confirm_true.md"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+CONFIRM=TRUE
+===TOS_META_END===
+PAYLOAD
 
-    local wrapper
-    wrapper=$(mktemp /tmp/tos_wrapper_XXXXXX.zsh)
-    cat > "${wrapper}" <<WRAPPER
-#!/bin/zsh
-function gh() {
-    echo "\$*" >> /tmp/tos_mock_gh_calls.log
-    if [[ "\$*" == *"pr merge"* ]]; then
-        local inbox_size
-        inbox_size=\$(wc -c < "${TOS_INBOX}")
-        echo "INBOX_SIZE_AT_PR_MERGE=\${inbox_size}" >> /tmp/tos_order.log
-    fi
-    echo '{"state":"MERGED"}'
-    return 0
-}
-function git() {
-    echo "\$*" >> /tmp/tos_mock_git_calls.log
-    # Simulate git diff returning matching files.
-    if [[ "\$*" == *diff* ]]; then
-        echo "calculator.zsh"
-    fi
-    return 0
-}
-export TOS_CONTROLLER_LOCKED=true
-source bin/tos.zsh test-project close trinity 1
-WRAPPER
-    chmod +x "${wrapper}"
+    cat > "$TOS_MOCK_BIN/gh" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"pr merge"* ]]; then
+    echo "INBOX_SIZE_AT_PR_MERGE=$(wc -c < "$TOS_INBOX")" >> /tmp/tos_order.log
+fi
+INNER
+    chmod +x "$TOS_MOCK_BIN/gh"
 
-    zsh "${wrapper}" 2>&1
-    rm -f "${wrapper}"
-
+    zsh bin/tos.zsh team_of_six close trinity 1 2>&1
     assert_file_contains /tmp/tos_order.log "INBOX_SIZE_AT_PR_MERGE=0"
 }

@@ -29,10 +29,10 @@
 # TEST 1 — Status reports correct trinity when hard lock is active
 # ---------------------------------------------------------------------------
 @test 'Status reports trinity number and HARD_LOCK when hard lock is active' {
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/test-project_trinity_3.lock"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_3.lock"
 
     local output
-    output=$(zsh bin/utils/lock/status.zsh "test-project" "test_architect" 2>&1)
+    output=$(zsh bin/utils/lock/status.zsh "team_of_six" "test_architect" 2>&1)
 
     # Output must contain the trinity number 3 and reference HARD_LOCK.
     echo "${output}" | grep -q "3"
@@ -45,10 +45,10 @@
 # TEST 2 — Status reports Trinity 0 when only soft lock is active
 # ---------------------------------------------------------------------------
 @test 'Status reports Trinity 0 and SOFT_LOCK when only soft lock is active' {
-    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/test-project_trinity_0.lock"
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
 
     local output
-    output=$(zsh bin/utils/lock/status.zsh "test-project" "test_architect" 2>&1)
+    output=$(zsh bin/utils/lock/status.zsh "team_of_six" "test_architect" 2>&1)
 
     echo "${output}" | grep -q "0"
     assert "$?" equals "0"
@@ -62,11 +62,11 @@
 @test 'Status reports no active lock when no lock files exist' {
     # Confirm clean state.
     local lock_count
-    lock_count=$(find "${TOS_LOCKS}" -name "test-project_trinity_*.lock" | wc -l)
+    lock_count=$(find "${TOS_LOCKS}" -name "team_of_six_trinity_*.lock" | wc -l)
     assert "${lock_count}" equals "0"
 
     local output exit_code
-    output=$(zsh bin/utils/lock/status.zsh "test-project" "test_architect" 2>&1)
+    output=$(zsh bin/utils/lock/status.zsh "team_of_six" "test_architect" 2>&1)
     exit_code=$?
 
     # Must exit cleanly — "no lock" is not an error condition.
