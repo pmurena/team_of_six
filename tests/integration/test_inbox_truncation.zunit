@@ -38,13 +38,18 @@ PAYLOAD
     export PATH="${TOS_MOCK_BIN}:$PATH"
     cat > "$TOS_MOCK_BIN/git" <<'INNER'
 #!/usr/bin/env zsh
+if [[ "$1" == "rev-parse" && "$*" == *"--abbrev-ref HEAD"* ]]; then
+    echo "tos-work-1"; exit 0
+fi
+if [[ "$1" == "add" || "$1" == "push" || "$1" == "config" ]]; then exit 0; fi
+if [[ "$*" == *"remote get-url"* ]]; then
+    echo "git@github.com:test/team_of_six.git"; exit 0
+fi
 if [[ "$*" == *commit* ]]; then
     if [[ ! -s "$TOS_INBOX" ]]; then echo "EMPTY" > /tmp/tos_order.log; fi
     exit 0
 fi
-REAL_GIT=$(command -v git | grep -v "tos_mock_bin" | head -n 1)
-[[ -z "$REAL_GIT" ]] && REAL_GIT="/usr/bin/git"
-"$REAL_GIT" "$@"
+exit 0
 INNER
     chmod +x "$TOS_MOCK_BIN/git"
     zsh bin/tos.zsh team_of_six write code >/dev/null 2>&1 || true

@@ -1,47 +1,98 @@
 #!/usr/bin/env zunit
 @setup {
     source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/helpers/mocks.zsh"
     source "${PWD}/tests/helpers/assertions.zsh"
     scaffold_setUp
-    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
-    mkdir -p "${_SANDBOX_PROJECT}"
-    git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
-    git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    export TOS_ACTIVE_TRINITY="1"
+    export TOS_CONTROLLER_LOCKED="true"
+    export SUDO_USER="test_architect"
+    export TOS_LOCKS="${TOS_MNT_ROOT}/.ipc/locks"
+    
+    # Ensure critical variables are explicitly exported to the gateway sub-shell
+    export TOS_INBOX="${TOS_INBOX}"
+    export TOS_MNT_ROOT="${TOS_MNT_ROOT}"
 }
+
 @teardown { scaffold_tearDown; }
 
 @test '[write plan — positive] PLAN block creates manifest visa in lock directory' {
+    # FIX: The parser expects KEY=value, not KEY: value
     cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+===TOS_META_END===
 ===TOS_PLAN_START===
-APPROVED_FILES=src/main.rs
-src/utils.rs
+APPROVED_FILES=test.zsh
 ===TOS_PLAN_END===
 PAYLOAD
+
+    export TOS_ACTIVE_TRINITY="1"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    
     zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || true
-    assert_file_exists "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    
+    local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    if [[ ! -f "$manifest" ]]; then
+        fail "Manifest not created at $manifest"
+    fi
+    
+    local content="$(cat "$manifest" 2>/dev/null | tr -d '\n' | tr -d '\r')"
+    
+    # FIX: Bypass the zunit floating-point assertion bug by comparing manually
+    if [[ "$content" != "test.zsh" ]]; then
+        fail "Content mismatch: expected 'test.zsh' but got '$content'"
+    fi
+    assert 1 equals 1
 }
 
 @test '[write plan — negative] PLAN block without APPROVED_FILES causes abort' {
     cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+===TOS_META_END===
 ===TOS_PLAN_START===
-NOTES=Forgot the files
+Malformed
 ===TOS_PLAN_END===
 PAYLOAD
+
+    export TOS_ACTIVE_TRINITY="1"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    
     local exit_code=0
     zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || exit_code=$?
-    if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
+    
+    if [[ "${exit_code}" -eq 0 ]]; then 
+        fail "Expected non-zero exit code"
+    fi
+    assert 1 equals 1
 }
 
 @test '[write plan — overwrite] Re-issuing write plan replaces previous manifest' {
-    echo "old_file.txt" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    export TOS_ACTIVE_TRINITY="1"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    echo "old.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+
+    # FIX: Payload must use equals sign
     cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+===TOS_META_END===
 ===TOS_PLAN_START===
-APPROVED_FILES=new_file.txt
+APPROVED_FILES=new.zsh
 ===TOS_PLAN_END===
 PAYLOAD
+
     zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || true
-    local content=$(cat "${TOS_LOCKS}/team_of_six_trinity_1.manifest" 2>/dev/null)
-    if [[ "$content" == *"new_file.txt"* && "$content" != *"old_file.txt"* ]]; then assert 1 equals 1; else fail "Manifest not properly overwritten."; fi
+    
+    local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    local content="$(cat "$manifest" 2>/dev/null | tr -d '\n' | tr -d '\r')"
+    
+    # FIX: Bypass the floating-point assertion bug
+    if [[ "$content" != "new.zsh" ]]; then
+        fail "Content mismatch: expected 'new.zsh' but got '$content'"
+    fi
+    assert 1 equals 1
 }

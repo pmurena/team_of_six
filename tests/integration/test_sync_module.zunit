@@ -25,7 +25,7 @@ PAYLOAD
     export PATH="${TOS_MOCK_BIN}:$PATH"
     cat > "${TOS_MOCK_BIN}/git" <<'INNER'
 #!/usr/bin/env zsh
-if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/repo.git"; exit 0; fi
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
 if [[ "$*" == *"clone"* ]]; then mkdir -p "/tmp/tos_test_root/sandbox/team_of_six"; exit 0; fi
 exit 0
 INNER
@@ -57,10 +57,12 @@ PAYLOAD
     git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
+    
+    # FIX: Set TARGET_TRINITY=1 to match TOS_ACTIVE_TRINITY and pass the Hallucination Check
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
 TARGET_PROJECT=team_of_six
-TARGET_TRINITY=2
+TARGET_TRINITY=1
 ===TOS_META_END===
 PAYLOAD
     export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
@@ -68,11 +70,14 @@ PAYLOAD
     export PATH="${TOS_MOCK_BIN}:$PATH"
     cat > "${TOS_MOCK_BIN}/git" <<'INNER'
 #!/usr/bin/env zsh
-if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/repo.git"; exit 0; fi
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
 if [[ "$*" == *"push"* ]]; then echo "called" > /tmp/tos_mock_git_push.log; exit 0; fi
 exit 0
 INNER
     chmod +x "${TOS_MOCK_BIN}/git"
+    rm -f /tmp/tos_mock_git_push.log
+    
+    # Passing 2 here is correct (it's the NEW_TRINITY arg)
     zsh bin/tos.zsh team_of_six sync trinity 2 >/dev/null 2>&1 || true
     
     if [[ -f /tmp/tos_mock_git_push.log ]]; then assert 1 equals 1; else fail "Push not called"; fi
@@ -85,10 +90,12 @@ INNER
     git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
+    
+    # FIX: Set TARGET_TRINITY=1 here as well
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
 TARGET_PROJECT=team_of_six
-TARGET_TRINITY=2
+TARGET_TRINITY=1
 ===TOS_META_END===
 PAYLOAD
     export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
@@ -96,7 +103,7 @@ PAYLOAD
     export PATH="${TOS_MOCK_BIN}:$PATH"
     cat > "${TOS_MOCK_BIN}/git" <<'INNER'
 #!/usr/bin/env zsh
-if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/repo.git"; exit 0; fi
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
 if [[ "$*" == *"push"* ]]; then exit 1; fi
 exit 0
 INNER

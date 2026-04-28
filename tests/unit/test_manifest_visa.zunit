@@ -25,7 +25,9 @@ INNER
 
     cat > "${TOS_MOCK_BIN}/git" <<'INNER'
 #!/usr/bin/env zsh
+if [[ "$1" == "rev-parse" && "$*" == *"--abbrev-ref HEAD"* ]]; then echo "tos-work-1"; exit 0; fi
 if [[ "$*" == *"push"* ]]; then exit 0; fi
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
 REAL_GIT=$(command -v git | grep -v tos_mock_bin | head -n 1)
 [[ -z "$REAL_GIT" ]] && REAL_GIT="/usr/bin/git"
 "$REAL_GIT" "$@"
