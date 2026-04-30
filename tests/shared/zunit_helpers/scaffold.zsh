@@ -16,9 +16,9 @@ export TOS_BIN="${TOS_LOCAL}/bin"
 function scaffold_setUp() {
     # 1. Fix PATH: Prepend mock bin ONLY if defined, and ensure system bins are present
     if [[ -n "${TOS_MOCK_BIN:-}" ]]; then
-        export PATH="${TOS_MOCK_BIN}:${PWD}/tests/helpers/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+        export PATH="${TOS_MOCK_BIN}:${PWD}/tests/shared/zunit_helpers/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
     else
-        export PATH="${PWD}/tests/helpers/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+        export PATH="${PWD}/tests/shared/zunit_helpers/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
     fi
 
     # 2. Re-clean and build the tree

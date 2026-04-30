@@ -4,14 +4,14 @@
 # =============================================================================
 
 @setup {
-    source "${PWD}/tests/helpers/scaffold.zsh"
-    source "${PWD}/tests/helpers/mocks.zsh"
-    source "${PWD}/tests/helpers/assertions.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
     
     scaffold_setUp
     reset_mocks
 
-    _FIXTURES="${PWD}/tests/fixtures/payloads"
+    _FIXTURES="${PWD}/tests/shared/payloads"
 
     export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
     mkdir -p "${TOS_MOCK_BIN}"

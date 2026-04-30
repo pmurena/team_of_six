@@ -1,4 +1,4 @@
-export TOS_MNT_ROOT="/tmp/tos_e2e_lQjS2W"
+export TOS_MNT_ROOT="/tmp/tos_e2e_MHIMv1"
 export TOS_BIN="$TOS_MNT_ROOT/.local/bin"
 export TOS_IPC="$TOS_MNT_ROOT/.ipc"
 export TOS_LOCKS="$TOS_MNT_ROOT/.ipc/locks"

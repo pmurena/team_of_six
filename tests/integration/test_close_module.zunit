@@ -1,8 +1,8 @@
 #!/usr/bin/env zunit
 @setup {
-    source "${PWD}/tests/helpers/scaffold.zsh"
-    source "${PWD}/tests/helpers/mocks.zsh"
-    source "${PWD}/tests/helpers/assertions.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
     

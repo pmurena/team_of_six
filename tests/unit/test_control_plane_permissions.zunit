@@ -35,7 +35,7 @@ if [[ ! -d "${TOS_MNT_ROOT}" ]]; then
 fi
 
 @setup {
-    source "${PWD}/tests/helpers/assertions.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
     # No scaffold_setUp needed — these tests read the real filesystem.
     # Use a known provisioned architect name for IPC ribbon tests.
     # Adjust _TEST_ARCHITECT if a different user is provisioned on this host.

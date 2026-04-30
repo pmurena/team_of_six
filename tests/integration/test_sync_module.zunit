@@ -1,8 +1,8 @@
 #!/usr/bin/env zunit
 @setup {
-    source "${PWD}/tests/helpers/scaffold.zsh"
-    source "${PWD}/tests/helpers/mocks.zsh"
-    source "${PWD}/tests/helpers/assertions.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
     export TOS_LOCKS="${TOS_MNT_ROOT}/.ipc/locks"
@@ -58,7 +58,6 @@ PAYLOAD
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
     
-    # FIX: Set TARGET_TRINITY=1 to match TOS_ACTIVE_TRINITY and pass the Hallucination Check
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
 TARGET_PROJECT=team_of_six
@@ -77,7 +76,6 @@ INNER
     chmod +x "${TOS_MOCK_BIN}/git"
     rm -f /tmp/tos_mock_git_push.log
     
-    # Passing 2 here is correct (it's the NEW_TRINITY arg)
     zsh bin/tos.zsh team_of_six sync trinity 2 >/dev/null 2>&1 || true
     
     if [[ -f /tmp/tos_mock_git_push.log ]]; then assert 1 equals 1; else fail "Push not called"; fi
@@ -91,7 +89,6 @@ INNER
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     export TOS_ACTIVE_TRINITY="1"
     
-    # FIX: Set TARGET_TRINITY=1 here as well
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_META_START===
 TARGET_PROJECT=team_of_six
@@ -111,4 +108,53 @@ INNER
     local exit_code=0
     zsh bin/tos.zsh team_of_six sync trinity 2 >/dev/null 2>&1 || exit_code=$?
     if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
+}
+
+@test '[sync trinity — handover] Syncing from Trinity 0 skips pushing tos-work-0' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
+    
+    # We are already on Trinity 0 (from @setup)
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+===TOS_META_END===
+PAYLOAD
+
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
+    
+    # Mock git to catch the illegal push of tos-work-0
+    cat > "${TOS_MOCK_BIN}/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
+if [[ "$*" == *"push"* ]]; then 
+    echo "$*" > /tmp/tos_mock_git_push.log
+    if [[ "$*" == *"tos-work-0"* ]]; then exit 1; fi
+    exit 0
+fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/git"
+    rm -f /tmp/tos_mock_git_push.log
+    
+    local exit_code=0
+    local output
+    output=$(zsh bin/tos.zsh team_of_six sync trinity 1 2>&1) || exit_code=$?
+    
+    # Check if the mock caught the bad push
+    if [[ -f /tmp/tos_mock_git_push.log ]]; then
+        local push_cmd=$(cat /tmp/tos_mock_git_push.log)
+        if [[ "$push_cmd" == *"tos-work-0"* ]]; then
+            fail "Module illegally attempted to push tos-work-0!"
+        fi
+    fi
+    
+    # It should cleanly transition to Trinity 1
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Sync failed unexpectedly:\n$output"; fi
+    assert "$exit_code" equals 0
+    if [[ ! -f "${TOS_LOCKS}/team_of_six_trinity_1.lock" ]]; then fail "Lock 1 not acquired"; fi
 }

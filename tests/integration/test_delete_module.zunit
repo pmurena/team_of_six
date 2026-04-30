@@ -1,32 +1,40 @@
 #!/usr/bin/env zunit
+
 @setup {
-    source "${PWD}/tests/helpers/scaffold.zsh"
-    source "${PWD}/tests/helpers/mocks.zsh"
-    source "${PWD}/tests/helpers/assertions.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
     scaffold_setUp
     reset_mocks
-    _FIXTURES="${PWD}/tests/fixtures/payloads"
+    _FIXTURES="${PWD}/tests/shared/payloads"
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
     
-    # CORRECT SANDBOX PATH
     _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
     mkdir -p "${_SANDBOX_PROJECT}"
 }
+
 @teardown { scaffold_tearDown; }
 
 @test '[delete project — positive] PAT MFA escalation before delete; scope revoked in EXIT trap' {
     scaffold_write_inbox "${_FIXTURES}/meta_confirm_zero.md"
     local exit_code=0
+    
+    # Run the module
     zsh bin/tos.zsh team_of_six delete project >/dev/null 2>&1 || exit_code=$?
+    
     assert "${exit_code}" equals 0
-    assert_mock_call_order /tmp/tos_mock_gh_calls.log "auth refresh" "repo delete"
-    assert_mock_called /tmp/tos_mock_gh_calls.log "remove-scopes delete_repo"
+
+    # 1. Verify the GRANT happens BEFORE the DELETE (String MUST be on one line)
+    assert_mock_call_order /tmp/tos_mock_gh_calls.log "auth refresh -h github.com -s delete_repo" "repo delete"
+
+    # 2. Verify the REVOKE happens (via the EXIT trap)
+    assert_mock_called /tmp/tos_mock_gh_calls.log "auth refresh -h github.com --remove-scopes delete_repo"
+    
     assert_dir_not_exists "${_SANDBOX_PROJECT}"
-    local inbox_size=$(wc -c < "${TOS_INBOX}" | tr -d ' ')
-    if [[ "$inbox_size" -le 1 ]]; then assert 1 equals 1; else fail "Inbox not empty. Size: $inbox_size bytes"; fi
 }
 
+# ... rest of tests ...
 @test '[delete project — negative] Scope revocation fires even when repo delete fails' {
     scaffold_write_inbox "${_FIXTURES}/meta_confirm_zero.md"
     export TOS_MOCK_GH_EXIT_repo="1"

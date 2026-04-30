@@ -22,5 +22,18 @@ cd "$PROJECT_DIR" || exit 1
 
 git init -q
 git checkout -b main -q
-git remote add origin "https://github.com/${SUDO_USER}/${PROJECT}.git" 2>/dev/null || true
-gh repo create "$PROJECT" --public --description "$BODY" --source=. --remote=origin --push
+
+git config user.name "Ghost"
+git config user.email "ghost@teamofsix.local"
+echo "# ${PROJECT}" > README.md
+[[ -n "$BODY" ]] && echo "\n$BODY" >> README.md
+git add README.md
+git commit -m "chore: initial commit by Ghost" -q
+
+# Notice: We removed the manual 'git remote add origin' line!
+# We let the 'gh' CLI configure the true remote dynamically.
+if ! gh repo create "$PROJECT" --private --description "$BODY" --source=. --remote=origin --push; then
+    echo "🚨 [ERROR] create project: GitHub CLI failed to create and push the repository." >&2
+    exit 1
+fi
+

@@ -1,109 +1,51 @@
-#!/usr/bin/env zsh
-# ==============================================================================
-# Team of Six - Write Plan Final Fixes
-# ==============================================================================
+#!/usr/bin/env bash
+# =============================================================================
+# TOS Architecture Refactoring Script
+# PURPOSE: Migrates global helpers/fixtures into the 'shared' namespace 
+#          and updates all internal file references.
+# =============================================================================
 
-echo "🛠️  Patching write plan tests (payload syntax and assertions)..."
+set -e
 
-cat > tests/integration/test_write_plan.zunit <<'EOF'
-#!/usr/bin/env zunit
-@setup {
-    source "${PWD}/tests/helpers/scaffold.zsh"
-    source "${PWD}/tests/helpers/mocks.zsh"
-    source "${PWD}/tests/helpers/assertions.zsh"
-    scaffold_setUp
-    export TOS_CONTROLLER_LOCKED="true"
-    export SUDO_USER="test_architect"
-    export TOS_LOCKS="${TOS_MNT_ROOT}/.ipc/locks"
-    
-    # Ensure critical variables are explicitly exported to the gateway sub-shell
-    export TOS_INBOX="${TOS_INBOX}"
-    export TOS_MNT_ROOT="${TOS_MNT_ROOT}"
-}
+echo "🏗️  Commencing architectural refactor..."
 
-@teardown { scaffold_tearDown; }
+# 1. Scaffold the new 'shared' and 'system/fixtures' namespaces
+mkdir -p tests/shared/payloads
+mkdir -p tests/shared/zunit_helpers
+mkdir -p tests/system/fixtures
 
-@test '[write plan — positive] PLAN block creates manifest visa in lock directory' {
-    # FIX: The parser expects KEY=value, not KEY: value
-    cat > "${TOS_INBOX}" <<'PAYLOAD'
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=1
-===TOS_META_END===
-===TOS_PLAN_START===
-APPROVED_FILES=test.zsh
-===TOS_PLAN_END===
-PAYLOAD
+# 2. Migrate the files
+echo "📦 Moving payloads to tests/shared/payloads/..."
+if [ -d "tests/fixtures/payloads" ]; then
+    mv tests/fixtures/payloads/* tests/shared/payloads/ 2>/dev/null || true
+fi
 
-    export TOS_ACTIVE_TRINITY="1"
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    
-    zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || true
-    
-    local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
-    if [[ ! -f "$manifest" ]]; then
-        fail "Manifest not created at $manifest"
-    fi
-    
-    local content="$(cat "$manifest" 2>/dev/null | tr -d '\n' | tr -d '\r')"
-    
-    # FIX: Bypass the zunit floating-point assertion bug by comparing manually
-    if [[ "$content" != "test.zsh" ]]; then
-        fail "Content mismatch: expected 'test.zsh' but got '$content'"
-    fi
-    assert 1 equals 1
-}
+echo "📦 Moving helpers to tests/shared/zunit_helpers/..."
+if [ -d "tests/helpers" ]; then
+    mv tests/helpers/* tests/shared/zunit_helpers/ 2>/dev/null || true
+fi
 
-@test '[write plan — negative] PLAN block without APPROVED_FILES causes abort' {
-    cat > "${TOS_INBOX}" <<'PAYLOAD'
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=1
-===TOS_META_END===
-===TOS_PLAN_START===
-Malformed
-===TOS_PLAN_END===
-PAYLOAD
+echo "📦 Moving system traps to tests/system/fixtures/..."
+if [ -d "tests/system/traps" ]; then
+    mv tests/system/traps/* tests/system/fixtures/ 2>/dev/null || true
+fi
 
-    export TOS_ACTIVE_TRINITY="1"
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    
-    local exit_code=0
-    zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || exit_code=$?
-    
-    if [[ "${exit_code}" -eq 0 ]]; then 
-        fail "Expected non-zero exit code"
-    fi
-    assert 1 equals 1
-}
+# 3. Purge the old, empty directories
+echo "🧹 Cleaning up vestigial directories..."
+rmdir tests/fixtures/payloads 2>/dev/null || true
+rmdir tests/fixtures 2>/dev/null || true
+rmdir tests/helpers 2>/dev/null || true
+rmdir tests/system/traps 2>/dev/null || true
 
-@test '[write plan — overwrite] Re-issuing write plan replaces previous manifest' {
-    export TOS_ACTIVE_TRINITY="1"
-    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
-    echo "old.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+# 4. Update the internal code references (Find & Replace)
+# We use .bak to ensure cross-platform compatibility between macOS (BSD sed) and Linux (GNU sed)
+echo "📝 Rewiring internal imports across all tests..."
 
-    # FIX: Payload must use equals sign
-    cat > "${TOS_INBOX}" <<'PAYLOAD'
-===TOS_META_START===
-TARGET_PROJECT=team_of_six
-TARGET_TRINITY=1
-===TOS_META_END===
-===TOS_PLAN_START===
-APPROVED_FILES=new.zsh
-===TOS_PLAN_END===
-PAYLOAD
+find tests -type f \( -name "*.zunit" -o -name "*.zsh" \) -exec sed -i.bak 's|tests/helpers|tests/shared/zunit_helpers|g' {} +
+find tests -type f \( -name "*.zunit" -o -name "*.zsh" \) -exec sed -i.bak 's|tests/fixtures/payloads|tests/shared/payloads|g' {} +
+find tests -type f \( -name "*.zunit" -o -name "*.zsh" \) -exec sed -i.bak 's|tests/system/traps|tests/system/fixtures|g' {} +
 
-    zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || true
-    
-    local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
-    local content="$(cat "$manifest" 2>/dev/null | tr -d '\n' | tr -d '\r')"
-    
-    # FIX: Bypass the floating-point assertion bug
-    if [[ "$content" != "new.zsh" ]]; then
-        fail "Content mismatch: expected 'new.zsh' but got '$content'"
-    fi
-    assert 1 equals 1
-}
-EOF
+# Clean up the sed backup files
+find tests -type f -name "*.bak" -delete
 
-echo "✅ Write Plan tests updated! Run your suite to confirm we have hit our Green Baseline."
+echo "✨ Refactoring complete! Your testing namespaces are now fully encapsulated."

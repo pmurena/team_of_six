@@ -39,24 +39,20 @@
 # gh — GitHub CLI mock
 # ---------------------------------------------------------------------------
 function gh() {
-    # Append every argument, space-separated, as one line in the log.
-    # "$*" expands all positional parameters as a single string.
-    echo "$*" >> /tmp/tos_mock_gh_calls.log
+    # 1. LOG EVERYTHING IMMEDIATELY
+    echo "gh $*" >> /tmp/tos_mock_gh_calls.log
 
-    # Support per-command exit-code overrides.
-    # Some tests need gh pr view to fail while gh issue create succeeds.
-    # Convention: export TOS_MOCK_GH_EXIT_<VERB>=1 where VERB is the first arg.
-    # e.g. TOS_MOCK_GH_EXIT_pr=1  makes all `gh pr ...` calls fail.
-    local verb="${1:-}"
+    # 2. Extract verb for exit code overrides (skipping flags)
+    local verb
+    for arg in "$@"; do
+        [[ "$arg" != -* ]] && { verb="$arg"; break; }
+    done
+
+    # 3. Handle overrides
     local override_var="TOS_MOCK_GH_EXIT_${verb}"
     local exit_code="${(P)override_var:-${TOS_MOCK_GH_EXIT:-0}}"
-
-    # Print whatever the test configured as mock output.
-    echo "${TOS_MOCK_GH_OUTPUT:-}"
-
     return $(( exit_code ))
 }
-
 # ---------------------------------------------------------------------------
 # git — Git mock
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@
 # =============================================================================
 
 @setup {
-    source "${PWD}/tests/helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
     scaffold_setUp
     
     export TEST_INBOX="/tmp/tos_parse_test_inbox.md"

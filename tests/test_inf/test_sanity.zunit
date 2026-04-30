@@ -1,3 +1,0 @@
-@test 'Sanity Check' {
-    assert 1 same_as 1
-}
