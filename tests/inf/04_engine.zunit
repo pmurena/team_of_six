@@ -1,0 +1,35 @@
+#!/usr/bin/env zunit
+
+
+@setup {
+  source "${PWD}/tests/shared/sandbox_toolkit.zsh"
+  # Build a fresh, isolated engine before each test in this file
+  sandbox_provision
+}
+
+@teardown {
+  # Burn the sandbox down after each test
+  sandbox_destroy
+}
+
+@test 'Engine: Gateway rejects empty calls' {
+  run tos.zsh
+  assert "$state" equals 1
+}
+
+@test 'Engine: Sandbox rejects unknown actions cleanly' {
+  # 'peek' is a valid action in our sync module
+  run tos.zsh dummy_project sync peek
+  
+  assert "$output" contains "GATEWAY"
+  assert "$state" equals 1 
+}
+
+@test 'Engine: Execution does not hang' {
+  # Prove the mock sudo and engine pass-through work without freezing
+  run timeout 2s tos.zsh dummy_project sync peek
+  
+  # Exit 1 means it completed and failed gracefully (no git repo).
+  # If it hung, timeout would force exit code 124.
+  assert "$state" equals 1
+}

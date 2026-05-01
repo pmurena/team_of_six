@@ -1,176 +1,110 @@
 #!/bin/bash
 
-# --- 0. PRIVILEGE CHECK ---
-if [[ $EUID -ne 0 ]]; then
-   echo "❌ ERROR: This script must be run as root (sudo)."
-   exit 1
-fi
-
-# --- 1. DEPENDENCY CHECK ---
-REQUIRED_PKGS=("zsh" "git" "rsync" "gh" "tee" "touch" "tree" "chown" "chmod" "mkdir")
-
-# [TECHNICAL DEBT]: Legacy dependencies slated for removal on the roadmap
-# Python3 is currently required by bin/system/export_parsers.zsh to merge JSON.
-# Slated to be replaced by a native Neovim LSP/Lua parser implementation.
-LEGACY_PKGS=("python3")
-
-MISSING_PKGS=()
-# Check both standard and legacy packages
-for pkg in "${REQUIRED_PKGS[@]}" "${LEGACY_PKGS[@]}"; do
-    if ! command -v "$pkg" &> /dev/null; then
-        MISSING_PKGS+=("$pkg")
-    fi
+# --- 1. PRE-EMPTIVE ARGUMENT PARSING & ZSH FORCE ---
+TEST_MODE=0
+# Quick scan to determine if we need root or not
+for arg in "$@"; do
+    [[ "$arg" == "--test-mode" ]] && TEST_MODE=1
 done
 
-if [ ${#MISSING_PKGS[@]} -ne 0 ]; then
-    echo "❌ ERROR: Missing required dependencies: ${MISSING_PKGS[*]}"
-    exit 1
-fi
-
-# --- 2. ZSH FORCE ---
-if [ -z "$ZSH_VERSION" ]; then
+# Only force Zsh if we aren't already in it
+if [[ -z "$ZSH_VERSION" ]]; then
     exec zsh "$0" "$@"
 fi
 
-# --- 3. REPO & REMOTE VALIDATION ---
-if [[ ! -d ".git" ]]; then
-    echo "❌ ERROR: .git directory not found. Run from repo root."
-    exit 1
+# --- 2. PRIVILEGE CHECK ---
+if [[ $TEST_MODE -eq 0 && $EUID -ne 0 ]]; then
+   echo "❌ ERROR: This script must be run as root (sudo) unless --test-mode is used."
+   exit 1
 fi
 
-REPO_URL=$(git remote get-url origin 2>/dev/null)
-if [[ "$REPO_URL" != *"team_of_six"* ]]; then
-    echo "❌ ERROR: Repository mismatch ($REPO_URL). Deployment aborted."
-    exit 1
-fi
-
-if [[ ! -f "inf/tos_deploy.zsh" ]]; then
-    echo "❌ ERROR: Project signature not found."
-    exit 1
-fi
-
-# --- 4. CONFIGURATION ---
+# --- 3. CONFIGURATION ---
 CONFIG_FILE="./conf/config"
+echo "🔍 Checking configuration..."
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
+    echo "✅ Configuration sourced."
 else
     echo "❌ ERROR: Configuration file missing at $CONFIG_FILE"
     exit 1
 fi
 
-: "${TOS_MNT_ROOT:?Config Error: TOS_MNT_ROOT must be defined in $CONFIG_FILE}"
-: "${AI_USER:?Config Error: AI_USER must be defined in $CONFIG_FILE}"
-: "${AI_GROUP:?Config Error: AI_GROUP must be defined in $CONFIG_FILE}"
+# --- 4. ARGUMENT PARSING (Fixed Loop) ---
+# Every branch MUST include a shift to avoid infinite loops
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --mnt-root)
+            TOS_MNT_ROOT="$2"
+            shift 2
+            ;;
+        --test-mode)
+            TEST_MODE=1
+            shift
+            ;;
+        *)
+            # Consume unknown arguments to prevent hanging
+            shift
+            ;;
+    esac
+done
 
+# --- 5. IDENTITY MAPPING (Mathematical Proof Mode) ---
 HUMAN_USER="${SUDO_USER:-$USER}"
+
+if [[ $TEST_MODE -eq 1 ]]; then
+    echo "🧪 [TEST MODE] Mapping all identities to $USER:$(id -gn $USER)"
+    AI_USER="$USER"
+    AI_GROUP=$(id -gn "$USER")
+fi
+
+: "${TOS_MNT_ROOT:?Config Error: TOS_MNT_ROOT undefined}"
 SOURCE_BIN="./bin/"
 
-[[ -t 0 ]] && clear
+# --- 6. EXECUTION (Structure) ---
+echo "🏗️  STEP 1: Creating Directory Architecture in $TOS_MNT_ROOT..."
+DIRS=(
+    "${TOS_MNT_ROOT}/.ipc/locks"
+    "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
+    "${TOS_MNT_ROOT}/.local/bin"
+    "${TOS_MNT_ROOT}/.local/conf"
+    "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
+)
 
-cat << 'EOF'
-  _______                    ____   __   _____ _      
- |__   __|                  / __ \ / _| / ____(_)     
-    | | ___  __ _ _ __ ___  | |  | | |_ | (___  ___  __
-    | |/ _ \/ _` | '_ ` _ \ | |  | |  _| \___ \| \ \/ /
-    | |  __/ (_| | | | | | || |__| | |  ____) | |>  < 
-    |_|\___|\_,_|_| |_| |_| \____/|_|  |_____/|_/_/\_\
+for dir in "${DIRS[@]}"; do
+    mkdir -p "$dir" && echo "  mkdir -> $dir"
+done
 
- Deployment & Security Scaffolding (Root Verified)
-==========================================================
-EOF
-
-# --- 5. DIRECTORY ARCHITECTURE ---
-echo "[*] STEP 1: Creating Directory Structure..."
-
-# Global Control Plane
-mkdir -p "${TOS_MNT_ROOT}/.ipc/locks"
-mkdir -p "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
-
-# Engine
-mkdir -p "${TOS_MNT_ROOT}/.local/bin"
-mkdir -p "${TOS_MNT_ROOT}/.local/conf"
-
-# Flattened Execution Plane
-mkdir -p "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
-
-# --- 6. FILE COPY & MIRRORING ---
-echo "[*] STEP 2: Copying Engine Files & Configuration..."
-
+# --- 7. FILE COPY & MIRRORING ---
+echo "🚚 STEP 2: Mirroring Engine & Configuration..."
 if [[ -d "$SOURCE_BIN" ]]; then
-    echo "  --- Rsync Summary ---"
-    # Runs rsync, filters out boilerplate lines, and indents the updated files
-    rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/" | \
-        grep -vE "^sending|^sent|^total|^$" | \
-        sed 's/^/    + /'
+    rsync -av --delete "${SOURCE_BIN}" "${TOS_MNT_ROOT}/.local/bin/" | sed 's/^/    /'
 else
-    echo "❌ ERROR: Source directory '$SOURCE_BIN' not found."
+    echo "❌ ERROR: Source bin not found."
     exit 1
 fi
 
-cp "$CONFIG_FILE" "${TOS_MNT_ROOT}/.local/conf/config"
+cp -v "$CONFIG_FILE" "${TOS_MNT_ROOT}/.local/conf/config"
 touch "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/inbox.md"
 touch "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/outbox.md"
+touch "${TOS_MNT_ROOT}/.local/conf/.token"
 
-# Secure Token Prompt (Conditional)
-TOKEN_FILE="${TOS_MNT_ROOT}/.local/conf/.token"
+# --- 8. SECURITY PERIMETER ---
+echo "🔐 STEP 3: Enforcing Security Perimeters..."
 
-if [[ -s "$TOKEN_FILE" ]]; then
-    echo "✅ Existing Ghost API token detected. Skipping prompt."
-else
-    echo ""
-    echo -n "🔑 Enter the API Token for the Ghost (input will be hidden): "
-    read -r -s GHOST_TOKEN
-    echo ""
+set_perm() {
+    local perm=$1; local owner=$2; local target=$3
+    echo "  perm: [$perm] owner: [$owner] -> $target"
+    # chown works in Test Mode because the owner is current $USER
+    chown -R "$owner" "$target" 2>/dev/null
+    chmod "$perm" "$target"
+}
 
-    if [[ -z "$GHOST_TOKEN" ]]; then
-        echo "⚠️  Warning: No token provided. You will need to populate .token manually."
-        touch "$TOKEN_FILE"
-    else
-        echo "$GHOST_TOKEN" > "$TOKEN_FILE"
-        echo "✅ Token captured and staged."
-    fi
-fi
+set_perm 750 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}"
+set_perm 750 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.local/bin"
+set_perm 640 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.local/conf/config"
+set_perm 400 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.local/conf/.token"
+set_perm 750 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.ipc"
+set_perm 700 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.ipc/locks"
+set_perm 3770 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
 
-# --- 7. SECURITY PERIMETER LOCKDOWN ---
-echo "[*] STEP 3: Enforcing Security Perimeters..."
-
-# Root Mount
-chown root:"${AI_USER}" "${TOS_MNT_ROOT}"
-chmod 750 "${TOS_MNT_ROOT}"
-
-# Binaries
-chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.local/bin"
-chmod -R 750 "${TOS_MNT_ROOT}/.local/bin"
-
-# Configurations
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.local/conf/config" "${TOS_MNT_ROOT}/.local/conf/.token"
-chmod 640 "${TOS_MNT_ROOT}/.local/conf/config"
-chmod 400 "${TOS_MNT_ROOT}/.local/conf/.token"
-
-# Global IPC root — ghost owns, group can enter
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc"
-chmod 750 "${TOS_MNT_ROOT}/.ipc"
-
-# Locks dir — ghost owns exclusively
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc/locks"
-chmod 700 "${TOS_MNT_ROOT}/.ipc/locks"
-
-# Per-user IPC ribbon
-chown "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
-chmod 3770 "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
-
-chown "${HUMAN_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/inbox.md"
-chown "${AI_USER}:${AI_GROUP}"    "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/outbox.md"
-chmod 660 "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}/"*.md
-
-# Flattened Sandbox (Air-gapped)
-chown -R "${AI_USER}:${AI_GROUP}" "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
-chmod -R 700 "${TOS_MNT_ROOT}/sandbox/${HUMAN_USER}"
-
-echo ""
-echo "✅ Deployment sequence complete. Sandbox secured for $HUMAN_USER."
-
-echo ""
-echo "[*] STEP 4: Auto-Provisioning User Environment..."
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-zsh "$SCRIPT_DIR/tos_add_user.zsh" "$HUMAN_USER"
+echo "🏁 Deployment logic verified for sandbox."

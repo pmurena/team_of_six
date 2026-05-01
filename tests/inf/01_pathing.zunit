@@ -1,0 +1,25 @@
+#!/usr/bin/env zunit
+
+
+@setup {
+  source "${PWD}/tests/shared/sandbox_toolkit.zsh"
+  sandbox_provision
+}
+
+@teardown {
+  sandbox_destroy
+}
+
+
+@test 'Path: TOS_ROOT points to a temporary sandbox' {
+  # Use a regex match assertion to satisfy ZUnit
+  assert "$TOS_ROOT" matches '/tmp/tos_test_'
+}
+
+@test 'Path: Gateway binary exists in the sandbox' {
+  assert "$TOS_ROOT/bin/tos.zsh" is_executable
+}
+
+@test 'Path: Configuration file is mirrored' {
+  assert "$TOS_ROOT/conf/config" is_file
+}

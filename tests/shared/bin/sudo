@@ -1,0 +1,11 @@
+#!/usr/bin/env zsh
+# Mock Sudo that sets the environment to satisfy Stage 1
+export SUDO_USER="$USER"
+
+while [[ "$1" == -* ]]; do
+    case "$1" in
+        -u|-g) shift 2 ;;
+        *) shift 1 ;;
+    esac
+done
+exec "$@"

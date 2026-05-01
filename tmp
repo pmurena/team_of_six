@@ -46,3 +46,58 @@ EOF
     if [[ "$state" -ne 0 ]]; then echo "\n🚨 STEP 9 (DELETE PROJECT) FAILED:\n$output\n" > /dev/tty; fi
     assert "$state" equals 0
 }
+
+
+#!/usr/bin/env zsh
+# stregone.zsh - The Grand Orchestrator
+
+TYPE="unit"
+
+# Parse arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --type) TYPE="$2"; shift ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+deploy_sandbox() {
+    local env_name=$1
+    echo "=> Deploying sterile TOS environment to /tmp/tos_${env_name}..."
+    rm -rf "/tmp/tos_${env_name}"
+    mkdir -p "/tmp/tos_${env_name}"
+    cp -r bin conf "/tmp/tos_${env_name}/"
+    export TOS_ROOT="/tmp/tos_${env_name}"
+}
+
+case $TYPE in
+    unit)
+        echo "=> Running pure logic units..."
+        zunit tests/unit
+        ;;
+    
+    integration)
+        deploy_sandbox "integration"
+        export TOS_MOCK_ENABLED=1
+        echo "=> Running deterministic integration matrix..."
+        zunit tests/ledger
+        ;;
+    
+    system)
+        if [[ -z "$GH_TOKEN" ]]; then
+            echo "❌ ERROR: --type system requires a live GH_TOKEN. Aborting."
+            exit 1
+        fi
+        deploy_sandbox "system"
+        export TOS_MOCK_ENABLED=0
+        echo "=> Running live system execution..."
+        # Running against tests/system, assuming a dedicated live-fire directory
+        zunit tests/ledger 
+        ;;
+        
+    *)
+        echo "❌ Invalid type: $TYPE. Use unit, integration, or system."
+        exit 1
+        ;;
+esac

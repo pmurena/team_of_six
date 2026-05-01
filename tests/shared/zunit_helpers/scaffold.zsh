@@ -90,3 +90,4 @@ function scaffold_tearDown() {
 function scaffold_write_inbox() {
     cp "$1" "${TOS_INBOX}"
 }
+

@@ -1,0 +1,34 @@
+#!/usr/bin/env zunit
+
+
+@setup {
+  source "${PWD}/tests/shared/sandbox_toolkit.zsh"
+  sandbox_provision
+}
+
+@teardown {
+  sandbox_destroy
+}
+
+
+@test 'Security: Token file has strict mode 0400' {
+  run stat -c "%a" "$TOS_ROOT/conf/.token"
+  assert "$output" same_as "400"
+}
+
+@test 'Security: Config file has mode 0640' {
+  run stat -c "%a" "$TOS_ROOT/conf/config"
+  assert "$output" same_as "640"
+}
+
+@test 'Security: IPC ribbon directory is setgid (3770)' {
+  # Based on deploy log: ribbon is at $TOS_MNT_ROOT/.ipc/$USER
+  # $TOS_ROOT is $TOS_MNT_ROOT/.local, so we go up one level
+  run stat -c "%a" "$TOS_ROOT/../.ipc/$USER"
+  assert "$output" same_as "3770"
+}
+
+@test 'Security: Locks directory is private (0700)' {
+  run stat -c "%a" "$TOS_ROOT/../.ipc/locks"
+  assert "$output" same_as "700"
+}
