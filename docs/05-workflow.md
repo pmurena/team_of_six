@@ -21,7 +21,7 @@ TOS assumes:
 
 ---
 
-## Phase 0 — Establishing Remote Truth (create project)
+## Phase 0 — Establishing Remote Truth (write project)
 
 TOS works against a real GitHub repository. If you are starting a new project, you must first create the remote repository. The Architect works with the Agent to define the project, and the Agent produces a payload:
 
@@ -36,26 +36,26 @@ BODY=A fast integer calculator in Zsh.
 Write this to the inbox and run:
 
 ```zsh
-tos myproject create project
+tos myproject write project
 ```
 
 The Ghost runs `git init`, `gh repo create`, and establishes the remote repository entirely from within the sandbox. The Architect's own working tree is not touched.
 
 ---
 
-## Phase 1 — Provisioning the Sandbox (sync start)
+## Phase 1 — Provisioning the Sandbox (sync project)
 
 ```zsh
-tos myproject sync start
+tos myproject sync project
 ```
 
 This provisions the Ghost's isolated sandbox. It clones the repository from GitHub into `${TOS_MNT_ROOT}/sandbox/<your-user>/myproject/`, configures the Ghost's Git identity, and acquires a Trinity 0 soft lock. The sandbox is entirely separate from your own working copy of the repository.
 
-After this command, `tos myproject sync start` will reject if called again — the sandbox already exists.
+After this command, `tos myproject sync project` will reject if called again — the sandbox already exists.
 
 ---
 
-## Phase 2 — Scoping (create issue)
+## Phase 2 — Scoping (write issue)
 
 The Ghost cannot start writing code until there is an issue to work against. The Agent produces a batch of Issue blocks:
 
@@ -73,7 +73,7 @@ BODY=Implement integer subtraction using native Zsh arithmetic.
 Write to the inbox, then run:
 
 ```zsh
-tos myproject create issue
+tos myproject write issue
 ```
 
 The Ghost creates each issue on GitHub and clears the inbox. Each issue number becomes a Trinity ID. Verify with `gh issue list`.

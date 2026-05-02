@@ -16,9 +16,9 @@
 # └─────────────────────────────────────────────────────────────────────────┘
 #
 # STEPS (matching test-concept-v2.md Section 7)
-#   1.  create project   → GitHub repo exists
+#   1.  write project   → GitHub repo exists
 #   2.  sync project     → sandbox cloned; SOFT_LOCK acquired
-#   3.  create issue     → ≥2 issues open on GitHub
+#   3.  write issue     → ≥2 issues open on GitHub
 #   4.  create trinity 1 → Draft PR open on GitHub
 #   5.  sync trinity 1   → HARD_LOCK acquired; outbox has snapshot
 #   6.  write plan       → .manifest visa created
@@ -228,16 +228,16 @@ mkdir -p \
 : > "${TOS_MNT_ROOT}/.ipc/${ARCHITECT_USER}/outbox.md"
 
 # ---------------------------------------------------------------------------
-# STEP 1 — Inception: create project
+# STEP 1 — Inception: write project
 # ---------------------------------------------------------------------------
-echo "── STEP 1: create project ──────────────────────────────────────────"
+echo "── STEP 1: write project ──────────────────────────────────────────"
 write_inbox "===TOS_META_START===
 TARGET_PROJECT=${REPO_NAME}
 TITLE=${REPO_NAME}
 BODY=E2E test repo created by grand_tutorial.zsh
 ===TOS_META_END==="
 
-tos "${REPO_NAME}" create project
+tos "${REPO_NAME}" write project
 assert_gh_succeeds \
     "STEP 1: gh repo view exits 0 (repo exists on GitHub)" \
     repo view "${REPO_NAME}"
@@ -263,10 +263,10 @@ assert_file_contains \
     "SOFT_LOCK"
 
 # ---------------------------------------------------------------------------
-# STEP 3 — Issue creation: create issue (two issues)
+# STEP 3 — Issue creation: write issue (two issues)
 # ---------------------------------------------------------------------------
 echo ""
-echo "── STEP 3: create issue ────────────────────────────────────────────"
+echo "── STEP 3: write issue ────────────────────────────────────────────"
 write_inbox "===TOS_ISSUE_START===
 TITLE=Implement add() function
 BODY=The primary calculation function for this trinity.
@@ -276,7 +276,7 @@ TITLE=Implement subtract() function
 BODY=Deferred to a future trinity.
 ===TOS_ISSUE_END==="
 
-tos "${REPO_NAME}" create issue
+tos "${REPO_NAME}" write issue
 
 # Query GitHub for the open issue count — must be at least 2.
 _issue_count=$(gh issue list \

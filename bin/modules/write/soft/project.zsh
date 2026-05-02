@@ -9,7 +9,7 @@ PROJECT=$(cat "$TOS_PARSE_DIR/1/TARGET_PROJECT.txt" 2>/dev/null)
 BODY=$(cat "$TOS_PARSE_DIR/1/BODY.txt" 2>/dev/null)
 
 if [[ -z "$PROJECT" ]]; then
-    echo "🚨 [ERROR] create project: Missing TARGET_PROJECT in META block." >&2
+    echo "🚨 [ERROR] write project: Missing TARGET_PROJECT in META block." >&2
     exit 1
 fi
 
@@ -33,7 +33,7 @@ git commit -m "chore: initial commit by Ghost" -q
 # Notice: We removed the manual 'git remote add origin' line!
 # We let the 'gh' CLI configure the true remote dynamically.
 if ! gh repo create "$PROJECT" --private --description "$BODY" --source=. --remote=origin --push; then
-    echo "🚨 [ERROR] create project: GitHub CLI failed to create and push the repository." >&2
+    echo "🚨 [ERROR] write project: GitHub CLI failed to create and push the repository." >&2
     exit 1
 fi
 

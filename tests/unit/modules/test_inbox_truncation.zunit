@@ -57,7 +57,7 @@ INNER
     if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }
 
-@test 'Inbox truncated before gh issue create in create issue (ADR 10)' {
+@test 'Inbox truncated before gh issue create in write issue (ADR 10)' {
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
     cat > "${TOS_INBOX}" <<'PAYLOAD'
@@ -75,7 +75,7 @@ if [[ "$*" == *"issue create"* ]]; then
 fi
 INNER
     chmod +x "$TOS_MOCK_BIN/gh"
-    zsh bin/tos.zsh team_of_six create issue >/dev/null 2>&1 || true
+    zsh bin/tos.zsh team_of_six write issue >/dev/null 2>&1 || true
     local result=$(cat /tmp/tos_order.log 2>/dev/null)
     if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }

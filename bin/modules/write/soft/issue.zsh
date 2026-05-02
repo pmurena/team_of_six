@@ -1,7 +1,7 @@
 #!/bin/zsh
 # ==============================================================================
 # Title: The Batch Issue Creator
-# Usage: tos <project> create issue
+# Usage: tos <project> write issue
 # Parses ISSUE blocks from the inbox and creates GitHub Issues for each one.
 # ==============================================================================
 [[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
