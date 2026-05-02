@@ -9,3 +9,4 @@ truncate -s 0 "$TOS_INPUT"
 gh pr merge "tos-work-$TOS_ACTIVE_TRINITY" --squash --delete-branch
 "$TOS_BIN/utils/lock/release.zsh" "$TOS_ACTIVE_PROJECT"
 echo "🏁 Trinity #$TOS_ACTIVE_TRINITY closed."
+gh issue close "$TOS_ACTIVE_TRINITY" -r "completed" 2>/dev/null || true
