@@ -1,22 +1,5 @@
 #!/bin/zsh
 # ==============================================================================
-# TOS Installer: Flight Recorder Telemetry Tool
-# ==============================================================================
-
-UTILS_DIR="bin/utils"
-RECORDER_FILE="$UTILS_DIR/flight_recorder.zsh"
-
-echo "🛠️ Installing Flight Recorder into $UTILS_DIR..."
-
-# Ensure the utilities directory exists (it should, but just in case)
-mkdir -p "$UTILS_DIR"
-
-# ---------------------------------------------------------------------------
-# Write the Flight Recorder script
-# ---------------------------------------------------------------------------
-cat << 'EOF' > "$RECORDER_FILE"
-#!/bin/zsh
-# ==============================================================================
 # TOS Flight Recorder (Telemetry & Bug Report Generator)
 # Captures system state and API network traffic for debugging.
 # ==============================================================================
@@ -88,15 +71,3 @@ echo "📦 Please zip the following directory and attach it to your bug report:"
 echo "   $TELEMETRY_DIR"
 
 exit $ENGINE_EXIT_CODE
-EOF
-
-# ---------------------------------------------------------------------------
-# Set Permissions and Finish
-# ---------------------------------------------------------------------------
-chmod +x "$RECORDER_FILE"
-
-echo "✅ Flight Recorder successfully installed at: $RECORDER_FILE"
-echo ""
-echo "🚀 How to use it for debugging or test-seeding:"
-echo "Instead of running: tos math-engine write code"
-echo "Run the wrapper:    zsh bin/utils/flight_recorder.zsh math-engine write code"
