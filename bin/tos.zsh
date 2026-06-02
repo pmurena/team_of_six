@@ -3,6 +3,13 @@
 # Team of Six - Global Gateway
 # ==============================================================================
 
+# Resolve the absolute physical path of this script, chasing any symlinks
+REAL_PATH="${0:A}"
+# Extract the directory containing the script (e.g., /mnt/team_of_six/.local/bin)
+BIN_DIR="${REAL_PATH:h}"
+# Go up two levels to set the global mount root (e.g., /mnt/team_of_six)
+export TOS_MNT_ROOT="${BIN_DIR:h:h}"
+
 # === STAGE 1: SECURITY PERIMETER ===
 if [[ -z "$SUDO_USER" && "$TOS_TEST_MODE" != "1" ]]; then
     if ! id -nG "$USER" | tr ' ' '\n' | grep -qx "${AI_GROUP:-team_of_six}"; then
@@ -39,6 +46,16 @@ if [[ -n "$CURRENT_REMOTE" && "$CURRENT_REMOTE" != *"team_of_six"* ]]; then
     CURRENT_REPO=$(basename "$CURRENT_REMOTE" .git 2>/dev/null || true)
     if [[ -n "$CURRENT_REPO" && "$CURRENT_REPO" != "$PROJECT_NAME" ]]; then
         echo "🚨 [ERROR] Project mismatch: active is '$CURRENT_REPO' but called with '$PROJECT_NAME'." >&2
+        exit 1
+    fi
+elif [[ -z "$CURRENT_REMOTE" ]]; then
+    if [[ "$MODULE" != "create" || "$ACTION" != "project" ]]; then
+        echo "🚨 [ERROR] Not in an initialized repository. Run 'tos $PROJECT_NAME create project' first." >&2
+        exit 1
+    fi
+    LOCAL_FOLDER=$(basename "$PWD")
+    if [[ "$LOCAL_FOLDER" != "$PROJECT_NAME" ]]; then
+        echo "🚨 [TYPO GUARD] Current folder name '$LOCAL_FOLDER' does not match requested project name '$PROJECT_NAME'." >&2
         exit 1
     fi
 fi

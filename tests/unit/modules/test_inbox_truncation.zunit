@@ -60,6 +60,8 @@ INNER
 @test 'Inbox truncated before gh issue create in write issue (ADR 10)' {
     echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
     export TOS_ACTIVE_TRINITY="0"
+    mkdir -p "${TOS_SANDBOX}/team_of_six"
+
     cat > "${TOS_INBOX}" <<'PAYLOAD'
 ===TOS_ISSUE_START===
 TITLE=Truncation test

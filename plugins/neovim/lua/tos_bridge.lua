@@ -34,6 +34,26 @@ local function in_git_repo()
 	return vim.fn.system("git rev-parse --is-inside-work-tree 2>/dev/null"):gsub("\n", "") == "true"
 end
 
+function M.get_agent_prompt(name)
+	local agent_name = name or "code"
+
+	-- 1. Resolve absolute path dynamically
+	local src_info = debug.getinfo(1, "S").source
+	local src_dir = vim.fn.fnamemodify(src_info:sub(2), ":p:h")
+	local prompt_path = vim.fn.resolve(src_dir .. "/../../../llm_agents/" .. agent_name .. ".md")
+
+	-- 2. Read and return the content safely
+	local file = io.open(prompt_path, "r")
+	if not file then
+		return "Error: TOS System prompt not found at " .. prompt_path
+	end
+
+	local content = file:read("*a")
+	file:close()
+
+	return content
+end
+
 -- ---------------------------------------------------------------------------
 -- Labels & Metadata Extraction
 -- ---------------------------------------------------------------------------
@@ -180,7 +200,7 @@ local function sync_trinity()
 end
 
 -- ---------------------------------------------------------------------------
--- Keymap Registration (The Missing Links)
+-- Keymap Registration
 -- ---------------------------------------------------------------------------
 
 local function register_keymaps()
@@ -199,9 +219,11 @@ local function register_keymaps()
 
 	-- SYNC MODULE
 	vim.keymap.set("n", "<leader>6ss", function()
-		run_async(string.format("%s %s sync start", tos_bin(), project))
-	end, opts("Sync Start"))
+		run_async(string.format("%s %s sync project", tos_bin(), project))
+	end, opts("Sync Project"))
+
 	vim.keymap.set("n", "<leader>6st", sync_trinity, opts("Sync Trinity"))
+
 	vim.keymap.set("n", "<leader>6sp", function()
 		vim.ui.input({ prompt = "Files to peek: " }, function(input)
 			if input then
@@ -216,16 +238,19 @@ local function register_keymaps()
 			run_async(string.format("%s %s write code", tos_bin(), project))
 		end)
 	end, opts("Write Code"))
+
 	vim.keymap.set("n", "<leader>6wm", function()
 		smart_yank("comment", function()
 			run_async(string.format("%s %s write comment", tos_bin(), project))
 		end)
 	end, opts("Write Comment"))
+
 	vim.keymap.set("n", "<leader>6wi", function()
 		smart_yank("issue", function()
 			run_async(string.format("%s %s write issue", tos_bin(), project))
 		end)
 	end, opts("Write Issue"))
+
 	vim.keymap.set("n", "<leader>6wt", function()
 		smart_yank("trinity", function()
 			run_async(string.format("%s %s write trinity", tos_bin(), project))
