@@ -108,3 +108,16 @@ set_perm 700 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.ipc/locks"
 set_perm 3770 "$AI_USER:$AI_GROUP" "${TOS_MNT_ROOT}/.ipc/${HUMAN_USER}"
 
 echo "🏁 Deployment logic verified for sandbox."
+
+# --- 9. SYSTEM WIRING ---
+echo "🔗 STEP 4: Creating global symlink..."
+
+# Force-create the symlink in the standard system path
+ln -sf "${TOS_MNT_ROOT}/.local/bin/tos.zsh" /usr/local/bin/tos
+chmod +x "${TOS_MNT_ROOT}/.local/bin/tos.zsh"
+
+echo "  symlink -> /usr/local/bin/tos"
+echo "================================================================="
+echo "✅ DEPLOYMENT COMPLETE"
+echo "================================================================="
+echo "The 'tos' command is now globally available."
