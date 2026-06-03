@@ -16,7 +16,7 @@ if [[ -z "$SUDO_USER" && "$TOS_TEST_MODE" != "1" ]]; then
         echo "🚨 [ACCESS DENIED]" >&2
         exit 1
     fi
-    exec sudo -n -u team_of_six "$0" "$@"
+	exec sudo -n -u team_of_six "$REAL_PATH" "$@"
     exit 1
 fi
 export TOS_CONTROLLER_LOCKED=true

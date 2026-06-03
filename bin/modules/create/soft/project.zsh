@@ -77,7 +77,12 @@ fi
     exit 1
 }
 
-# Output only the Remote URL for the Architect
+# Output for the Architect
 echo "✅ Incubation Complete."
 echo ""
 echo "REMOTE_URL=$REMOTE_URL"
+
+# Generate clone suggestions
+REPO_FULL=$(gh repo view "$PROJECT" --json nameWithOwner -q .nameWithOwner 2>/dev/null)
+echo "CLONE_HTTPS=\"git clone https://github.com/${REPO_FULL}.git .\""
+echo "CLONE_SSH=\"git clone git@github.com:${REPO_FULL}.git .\""
