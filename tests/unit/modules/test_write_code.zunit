@@ -80,7 +80,7 @@ INNEREOF
     sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
 
     local output
-    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || true
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write code 2>&1) || true
 
     assert_file_exists "${_SANDBOX_PROJECT}/calculator.zsh"
     
@@ -104,7 +104,7 @@ INNEREOF
     sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
 
     local output
-    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || true
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write code 2>&1) || true
 
     assert_file_exists "${_SANDBOX_PROJECT}/calculator.zsh"
     assert_file_exists "${_SANDBOX_PROJECT}/test_calculator.zsh"
@@ -121,7 +121,7 @@ INNEREOF
     sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
 
     local output
-    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || true
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write code 2>&1) || true
 
     assert_file_not_exists "${_SANDBOX_PROJECT}/rogue.zsh"
 
@@ -140,7 +140,7 @@ INNEREOF
     sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
 
     local output
-    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || true
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write code 2>&1) || true
 
     local found=$(find "${TOS_SANDBOX}" -name "passwd" 2>/dev/null | wc -l)
     assert "${found}" equals 0
@@ -162,7 +162,7 @@ INNEREOF
     export TOS_MOCK_GIT_EXIT_push="1"
 
     local output
-    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || true
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write code 2>&1) || true
 
     if echo "${output}" | grep -qi "Push failed"; then
         assert 1 equals 1
@@ -181,7 +181,7 @@ INNEREOF
     sed -i 's/TARGET_TRINITY=.*/TARGET_TRINITY=1/g' "${TOS_INBOX}" 2>/dev/null || true
 
     local output
-    output=$(zsh bin/tos.zsh team_of_six write code 2>&1) || true
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write code 2>&1) || true
 
     assert_file_not_exists "${_SANDBOX_PROJECT}/calculator.zsh"
 

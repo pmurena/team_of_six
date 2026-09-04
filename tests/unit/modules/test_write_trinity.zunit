@@ -96,7 +96,7 @@ PAYLOAD
 test_calculator.zsh"
 
     local output
-    output=$(zsh bin/tos.zsh team_of_six write trinity 2>&1)
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write trinity 2>&1)
     local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
     
     if [[ "$gh_log" == *"pr merge"* && "$gh_log" == *"--merge"* ]]; then assert 1 equals 1; else fail "pr merge not called. Output: ${output}"; fi
@@ -122,7 +122,7 @@ PAYLOAD
     export TOS_MOCK_GIT_OUTPUT="calculator.zsh"
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six write trinity 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write trinity 2>&1) || exit_code=$?
 
     local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
     if [[ "$gh_log" == *"pr merge"* ]]; then fail "pr merge was called despite hallucination!"; fi

@@ -106,7 +106,7 @@
     local output
     output=$(
         TOS_CONTROLLER_LOCKED=true \
-        zsh bin/tos.zsh team_of_six nonexistent command 2>&1
+        zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six nonexistent command 2>&1
     ) || true
 	# The token must not appear anywhere in stdout or stderr.
     # We use an if-statement to catch grep's exit code without triggering set -e

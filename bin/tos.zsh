@@ -8,7 +8,7 @@ REAL_PATH="${0:A}"
 # Extract the directory containing the script (e.g., /mnt/team_of_six/.local/bin)
 BIN_DIR="${REAL_PATH:h}"
 # Go up two levels to set the global mount root (e.g., /mnt/team_of_six)
-export TOS_MNT_ROOT="${BIN_DIR:h:h}"
+export TOS_MNT_ROOT="${TOS_MNT_ROOT:-${BIN_DIR:h:h}}"
 
 # === STAGE 1: SECURITY PERIMETER ===
 if [[ -z "$SUDO_USER" && "$TOS_TEST_MODE" != "1" ]]; then
@@ -108,4 +108,4 @@ fi
 echo "🔑 [GATEWAY] $SUDO_USER | $PROJECT_NAME | $MODULE $ACTION $*"
 
 set -o pipefail
-{ "$TARGET_SCRIPT" "$PROJECT_NAME" "$@" } 2>&1 | tee "$TOS_CONTEXT"
+{ "$TARGET_SCRIPT" "$PROJECT_NAME" "$@" } 2>&1 | tee "$TOS_CONTEXT" || exit $?

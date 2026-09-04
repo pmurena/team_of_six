@@ -30,7 +30,7 @@ PAYLOAD
     export TOS_ACTIVE_TRINITY="1"
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     
-    zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || true
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write plan >/dev/null 2>&1 || true
     
     local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
     if [[ ! -f "$manifest" ]]; then
@@ -61,7 +61,7 @@ PAYLOAD
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     
     local exit_code=0
-    zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || exit_code=$?
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write plan >/dev/null 2>&1 || exit_code=$?
     
     if [[ "${exit_code}" -eq 0 ]]; then 
         fail "Expected non-zero exit code"
@@ -85,7 +85,7 @@ APPROVED_FILES=new.zsh
 ===TOS_PLAN_END===
 PAYLOAD
 
-    zsh bin/tos.zsh team_of_six write plan >/dev/null 2>&1 || true
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write plan >/dev/null 2>&1 || true
     
     local manifest="${TOS_LOCKS}/team_of_six_trinity_1.manifest"
     local content="$(cat "$manifest" 2>/dev/null | tr -d '\n' | tr -d '\r')"

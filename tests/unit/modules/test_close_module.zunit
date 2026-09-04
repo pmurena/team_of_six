@@ -30,7 +30,7 @@ PAYLOAD
     export TOS_MOCK_GH_OUTPUT='{"state":"OPEN","number":1}'
 
     local exit_code=0
-    zsh bin/tos.zsh team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
     assert "${exit_code}" equals 0
     assert_mock_called /tmp/tos_mock_gh_calls.log "pr merge"
     assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
@@ -47,7 +47,7 @@ TARGET_TRINITY=1
 PAYLOAD
     
     local exit_code=0
-    zsh bin/tos.zsh team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
     if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
 }
 
@@ -63,7 +63,7 @@ CONFIRM=TRUE
 PAYLOAD
 
     local exit_code=0
-    zsh bin/tos.zsh team_of_six close project >/dev/null 2>&1 || exit_code=$?
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close project >/dev/null 2>&1 || exit_code=$?
     assert "${exit_code}" equals 0
     assert_dir_not_exists "${_SANDBOX_PROJECT}"
 }
@@ -80,7 +80,7 @@ CONFIRM=TRUE
 PAYLOAD
 
     local exit_code=0
-    zsh bin/tos.zsh team_of_six close project >/dev/null 2>&1 || exit_code=$?
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close project >/dev/null 2>&1 || exit_code=$?
     if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
     assert_dir_exists "${_SANDBOX_PROJECT}"
 }
@@ -96,7 +96,7 @@ TARGET_TRINITY=0
 PAYLOAD
 
     local exit_code=0
-    zsh bin/tos.zsh team_of_six close project >/dev/null 2>&1 || exit_code=$?
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close project >/dev/null 2>&1 || exit_code=$?
     if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
     assert_dir_exists "${_SANDBOX_PROJECT}"
 }

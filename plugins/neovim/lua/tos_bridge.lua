@@ -15,7 +15,7 @@ local function get_project_name()
 end
 
 local function get_mnt_root()
-	return os.getenv("TOS_MNT_ROOT") or "${TOS_MNT_ROOT}"
+	return os.getenv("TOS_MNT_ROOT") or "/tmp"
 end
 
 local function get_user()

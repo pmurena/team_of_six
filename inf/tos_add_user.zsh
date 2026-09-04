@@ -44,6 +44,7 @@ chmod 660 "$TARGET_IPC/"*.md
 
 chown "${AI_USER}:${AI_GROUP}" "$TARGET_IPC"
 chmod 3770 "$TARGET_IPC"
+setfacl -d -m u::rwX,g::rwX,o::--- "$TARGET_IPC"
 
 # 3. Provision flattened sandbox
 TARGET_SANDBOX="$TOS_MNT_ROOT/sandbox/$TARGET_USER"
@@ -65,5 +66,9 @@ else
     exit 1
 fi
 rm -f "$SUDO_TMP"
+
+# 5. Global Environment Variable
+echo "export TOS_MNT_ROOT=\"$TOS_MNT_ROOT\"" > /etc/profile.d/tos.sh
+chmod 644 /etc/profile.d/tos.sh
 
 echo "✅ $TARGET_USER onboarded successfully."

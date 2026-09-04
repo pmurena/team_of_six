@@ -56,7 +56,7 @@ SCRIPT
 
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six dummy action 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six dummy action 2>&1) || exit_code=$?
 
     # Fallback: Read the file that `tee` wrote to
     local log_content=""
@@ -84,7 +84,7 @@ SCRIPT
     export TOS_ACTIVE_TRINITY="0"
     local output
     local exit_code=0
-    output=$(TOS_ACTIVE_TRINITY=0 zsh bin/tos.zsh team_of_six dummy hard_action 2>&1) || exit_code=$?
+    output=$(TOS_ACTIVE_TRINITY=0 zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six dummy hard_action 2>&1) || exit_code=$?
 
     if [[ "${exit_code}" -eq 0 ]]; then
         fail "Expected non-zero exit code. Output: ${output}"
@@ -112,7 +112,7 @@ SCRIPT
 
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six dummy hard_action 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six dummy hard_action 2>&1) || exit_code=$?
 
     # Fallback: Read the file that `tee` wrote to
     local log_content=""
@@ -135,7 +135,7 @@ SCRIPT
 @test 'Unknown module and action returns non-zero with informative error' {
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six nonexistent thing 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six nonexistent thing 2>&1) || exit_code=$?
 
     if [[ "${exit_code}" -eq 0 ]]; then
         fail "Expected non-zero exit code. Output: ${output}"

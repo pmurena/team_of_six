@@ -169,14 +169,14 @@ function assert_file_nonempty() {
 # On macOS use `stat -f '%OLp'` — the test runner must supply the correct
 # variant; here we default to Linux format.
 function assert_mode() {
-    local path="$1"
+    local target_path="$1"
     local expected_mode="$2"
     local actual_mode
-    actual_mode=$(stat -c '%a' "${path}" 2>/dev/null)
+    actual_mode=$(stat -c '%a' "${target_path}" 2>/dev/null)
     if [[ "${actual_mode}" == "${expected_mode}" ]]; then
         return 0
     fi
-    echo "ASSERT FAIL: mode mismatch on ${path}" >&2
+    echo "ASSERT FAIL: mode mismatch on ${target_path}" >&2
     echo "  Expected: ${expected_mode}" >&2
     echo "  Actual:   ${actual_mode}" >&2
     return 1
@@ -187,14 +187,14 @@ function assert_mode() {
 # ---------------------------------------------------------------------------
 # Checks the owning username reported by `stat -c '%U'`.
 function assert_owner() {
-    local path="$1"
+    local target_path="$1"
     local expected_owner="$2"
     local actual_owner
-    actual_owner=$(stat -c '%U' "${path}" 2>/dev/null)
+    actual_owner=$(stat -c '%U' "${target_path}" 2>/dev/null)
     if [[ "${actual_owner}" == "${expected_owner}" ]]; then
         return 0
     fi
-    echo "ASSERT FAIL: owner mismatch on ${path}" >&2
+    echo "ASSERT FAIL: owner mismatch on ${target_path}" >&2
     echo "  Expected: ${expected_owner}" >&2
     echo "  Actual:   ${actual_owner}" >&2
     return 1

@@ -21,7 +21,7 @@
     local exit_code=0
     
     # Run the module
-    zsh bin/tos.zsh team_of_six delete project >/dev/null 2>&1 || exit_code=$?
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six delete project >/dev/null 2>&1 || exit_code=$?
     
     assert "${exit_code}" equals 0
 
@@ -38,7 +38,7 @@
 @test '[delete project — negative] Scope revocation fires even when repo delete fails' {
     scaffold_write_inbox "${_FIXTURES}/meta_confirm_zero.md"
     export TOS_MOCK_GH_EXIT_repo="1"
-    zsh bin/tos.zsh team_of_six delete project >/dev/null 2>&1 || true
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six delete project >/dev/null 2>&1 || true
     assert_mock_called /tmp/tos_mock_gh_calls.log "remove-scopes delete_repo"
     assert 1 equals 1
 }
@@ -54,7 +54,7 @@ BODY=Confirm is missing.
 PAYLOAD
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six delete project 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six delete project 2>&1) || exit_code=$?
     if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
     assert_mock_not_called /tmp/tos_mock_gh_calls.log "repo delete"
     if echo "${output}" | grep -qi "CONFIRM\|confirmation required"; then assert 1 equals 1; else fail "Did not output confirmation requirement."; fi

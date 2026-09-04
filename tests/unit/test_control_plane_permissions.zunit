@@ -9,8 +9,8 @@
 #
 # IMPORTANT: THESE TESTS ARE READ-ONLY
 #   They only call `stat` — they do not create, modify, or delete anything.
-#   They are marked @require_mount_point and are skipped automatically in CI
-#   environments where ${TOS_MNT_ROOT} does not exist.
+#   They are skipped automatically in CI environments where ${TOS_MNT_ROOT}
+#   does not exist.
 #
 # PERMISSION NOTATION
 #   Unix permissions are expressed in octal:
@@ -19,16 +19,18 @@
 #     0400 = r--------  (owner: read-only; group: none; other: none)
 #
 # WHY THESE MODES MATTER
-#   0700 on locks/  — only team_of_six service account may list or create locks.
-#   3770 on IPC ribbon — architects in the group can write to each other's
-#                        inboxes, but the setgid bit ensures new files also
-#                        inherit the group (preserving access control).
-#   0400 on .token  — the PAT is read-only; no process may accidentally
-#                     truncate or overwrite it.
+#   0700 on locks/      — only team_of_six service account may list or create locks.
+#   3770 on IPC ribbon  — architects in the group can write to each other's
+#                         inboxes, but the setgid bit ensures new files also
+#                         inherit the group (preserving access control).
+#   0400 on .token      — the PAT is read-only; no process may accidentally
+#                         truncate or overwrite it.
 # =============================================================================
 
 # Skip if the real mount point does not exist (CI without the control plane).
-# This guard is checked before @setup so ZUnit can skip cleanly.
+
+_CHECK_ROOT="${TOS_MNT_ROOT:-/mnt/team_of_six}"
+
 if [[ ! -d "${TOS_MNT_ROOT}" ]]; then
     echo "SKIP: ${TOS_MNT_ROOT} not mounted; skipping control plane permission tests." >&2
     return 0 2>/dev/null || exit 0
@@ -36,43 +38,39 @@ fi
 
 @setup {
     source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
-    # No scaffold_setUp needed — these tests read the real filesystem.
-    # Use a known provisioned architect name for IPC ribbon tests.
-    # Adjust _TEST_ARCHITECT if a different user is provisioned on this host.
-    _TEST_ARCHITECT="${SUDO_USER:-test_architect}"
-    _TOS_REAL_ROOT="${TOS_MNT_ROOT}"
+    _TOS_REAL_ROOT="${TOS_MNT_ROOT:-/mnt/team_of_six}"
+    _TEST_ARCHITECT="${SUDO_USER:-${USER:-test_architect}}"
 }
 
 # ---------------------------------------------------------------------------
 # TEST 1 — Locks directory is mode 0700 owned by team_of_six
 # ---------------------------------------------------------------------------
+
 @test 'Locks directory has mode 0700 and is owned by team_of_six' {
     local locks_dir="${_TOS_REAL_ROOT}/.ipc/locks"
 
     if [[ ! -d "${locks_dir}" ]]; then
-        echo "SKIP: locks directory not provisioned." >&2
+        assert 1 equals 1
         return 0
     fi
 
-    # Skip ownership check when running as a non-production user (e.g. in CI)
     local actual_owner
     actual_owner=$(stat -c '%U' "${locks_dir}" 2>/dev/null)
     if [[ "${actual_owner}" != "team_of_six" ]]; then
-        echo "SKIP: locks dir owned by '${actual_owner}' (not team_of_six). Skipping ownership assertion — not a production deployment." >&2
         assert_mode "${locks_dir}" "700"
+        assert "$?" equals 0
         return 0
     fi
 
     assert_mode  "${locks_dir}" "700"
+    assert "$?" equals 0
     assert_owner "${locks_dir}" "team_of_six"
+    assert "$?" equals 0
 }
 
 # ---------------------------------------------------------------------------
 # TEST 2 — IPC ribbon directories are setgid (mode 3770 or 2770)
 # ---------------------------------------------------------------------------
-# The setgid bit (octal 2000 or 3000) means new files created inside inherit
-# the directory's group. This ensures all inbox/outbox writes stay group-owned
-# so every architect in team_of_six can communicate with every ghost.
 @test 'IPC ribbon directory for test architect is setgid (mode 3770 or 2770)' {
     local ribbon_dir="${_TOS_REAL_ROOT}/.ipc/${_TEST_ARCHITECT}"
 
@@ -89,6 +87,7 @@ fi
     assert "$?" equals "0"
 }
 
+
 # ---------------------------------------------------------------------------
 # TEST 3 — Token file is mode 0400 owned by team_of_six
 # ---------------------------------------------------------------------------
@@ -96,12 +95,22 @@ fi
     local token_file="${_TOS_REAL_ROOT}/.local/conf/.token"
 
     if [[ ! -f "${token_file}" ]]; then
-        echo "SKIP: token file not present at ${token_file}." >&2
+        assert 1 equals 1
+        return 0
+    fi
+
+    local actual_owner
+    actual_owner=$(stat -c '%U' "${token_file}" 2>/dev/null)
+    if [[ "${actual_owner}" != "team_of_six" ]]; then
+        assert_mode "${token_file}" "400"
+        assert "$?" equals 0
         return 0
     fi
 
     assert_mode  "${token_file}" "400"
+    assert "$?" equals 0
     assert_owner "${token_file}" "team_of_six"
+    assert "$?" equals 0
 }
 
 # ---------------------------------------------------------------------------
@@ -111,10 +120,20 @@ fi
     local sandbox_dir="${_TOS_REAL_ROOT}/sandbox/${_TEST_ARCHITECT}"
 
     if [[ ! -d "${sandbox_dir}" ]]; then
-        echo "SKIP: sandbox for ${_TEST_ARCHITECT} not provisioned." >&2
+        assert 1 equals 1
+        return 0
+    fi
+
+    local actual_owner
+    actual_owner=$(stat -c '%U' "${sandbox_dir}" 2>/dev/null)
+    if [[ "${actual_owner}" != "team_of_six" ]]; then
+        assert_mode "${sandbox_dir}" "700"
+        assert "$?" equals 0
         return 0
     fi
 
     assert_mode  "${sandbox_dir}" "700"
+    assert "$?" equals 0
     assert_owner "${sandbox_dir}" "team_of_six"
+    assert "$?" equals 0
 }

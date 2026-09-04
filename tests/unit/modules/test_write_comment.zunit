@@ -75,7 +75,7 @@ INNEREOF
 
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six write comment 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write comment 2>&1) || exit_code=$?
 
     if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
     assert "${exit_code}" equals 0
@@ -97,7 +97,7 @@ INNEREOF
 
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six write comment 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write comment 2>&1) || exit_code=$?
 
     if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
     assert "${exit_code}" equals 0
@@ -117,7 +117,7 @@ PAYLOAD
 
     local output
     local exit_code=0
-    output=$(zsh bin/tos.zsh team_of_six write comment 2>&1) || exit_code=$?
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write comment 2>&1) || exit_code=$?
 
     if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway aborted unexpectedly! Output log:\n${output}"; fi
 

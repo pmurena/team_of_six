@@ -52,7 +52,7 @@ fi
 exit 0
 INNER
     chmod +x "$TOS_MOCK_BIN/git"
-    zsh bin/tos.zsh team_of_six write code >/dev/null 2>&1 || true
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write code >/dev/null 2>&1 || true
     local result=$(cat /tmp/tos_order.log 2>/dev/null)
     if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }
@@ -77,7 +77,7 @@ if [[ "$*" == *"issue create"* ]]; then
 fi
 INNER
     chmod +x "$TOS_MOCK_BIN/gh"
-    zsh bin/tos.zsh team_of_six write issue >/dev/null 2>&1 || true
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write issue >/dev/null 2>&1 || true
     local result=$(cat /tmp/tos_order.log 2>/dev/null)
     if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }
@@ -100,7 +100,7 @@ if [[ "$*" == *"pr merge"* ]]; then
 fi
 INNER
     chmod +x "$TOS_MOCK_BIN/gh"
-    zsh bin/tos.zsh team_of_six close trinity 1 >/dev/null 2>&1 || true
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close trinity 1 >/dev/null 2>&1 || true
     local result=$(cat /tmp/tos_order.log 2>/dev/null)
     if [[ "$result" == *"EMPTY"* ]]; then assert 1 equals 1; else fail "Inbox not empty"; fi
 }
