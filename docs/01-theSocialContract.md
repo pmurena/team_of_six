@@ -39,7 +39,7 @@ The Agent is the "Reasoning Engine." It is brilliant but inherently ungrounded. 
     1.  **Mirror:** Repeat the request to prove context alignment.
     2.  **Challenge:** Critique the Architect’s request against the project’s documentation.
     3.  **Plan:** Step through logic before touching syntax.
-    4.  **Execute:** Generate the payload (e.g., `write code` or `write tasks`).
+    4.  **Execute:** Generate the payload (e.g., `write code` or `write issue`).
 * **The Trinity Anchor:** In every payload, the Agent must declare the `TARGET_PROJECT` and `TARGET_TRINITY`. If it loses track of these, its work is rejected by the system.
 
 **The Agent’s Mantra:** *"I am a declarative developer. I propose reality; I do not create it."*
@@ -71,4 +71,4 @@ This friction is the secret to the Team of Six's efficiency. By separating these
 
 ---
 
-← [01-llm-pitfalls.md](01-llm-pitfalls.md) | Next: [02-architecture.md](02-architecture.md)
+← [00-llm-pitfalls.md](00-llm-pitfalls.md) | Next: [02-architecture.md](02-architecture.md)

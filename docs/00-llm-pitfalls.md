@@ -77,4 +77,4 @@ This is manageable in a single short session. Across multiple sessions, or acros
 
 ---
 
-← [README.md](../README.md) | Next: [02-architecture.md](02-architecture.md)
+← [README.md](../README.md) | Next: [01-theSocialContract.md](01-theSocialContract.md)

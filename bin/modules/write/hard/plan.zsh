@@ -13,6 +13,9 @@ if [[ -z "$MANIFEST" ]]; then
     exit 1
 fi
 
-# Write the visa file to the control plane
-echo "$MANIFEST" > "${TOS_LOCKS}/${TOS_ACTIVE_PROJECT}_trinity_${TOS_ACTIVE_TRINITY}.manifest"
+# Write the visa file to the control plane.
+# Resolution must match check_manifest_visa.zsh and the lock utilities.
+GLOBAL_LOCKS="${TOS_LOCKS:-${TOS_MNT_ROOT}/.ipc/locks}"
+mkdir -p "$GLOBAL_LOCKS"
+echo "$MANIFEST" > "${GLOBAL_LOCKS}/${TOS_ACTIVE_PROJECT}_trinity_${TOS_ACTIVE_TRINITY}.manifest"
 echo "✅ Intent Lock established. Manifest visa issued."

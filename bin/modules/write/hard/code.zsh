@@ -50,11 +50,10 @@ if [[ ${#FILE_ITEMS[@]} -gt 0 ]]; then
         fi
 
         # [SECURITY] Manifest Visa Verification (ADR 9)
-        MANIFEST_FILE="$TOS_MNT_ROOT/.ipc/locks/${TOS_ACTIVE_PROJECT}_trinity_${ACTIVE_TRINITY}.manifest"
-        if ! grep -qF "$FILE_PATH" "$MANIFEST_FILE" 2>/dev/null; then
-            echo "🚨 SEC-FAULT: File '$FILE_PATH' is not authorized by the manifest visa."
-            exit 1
-        fi
+        # Delegated to the shared util: word-exact matching, not substring.
+        # A manifest listing "src/config.zsh" must NOT authorise "config.zsh".
+        "$TOS_BIN/utils/check_manifest_visa.zsh" \
+            "$FILE_PATH" "$TOS_ACTIVE_PROJECT" "$ACTIVE_TRINITY" || exit 1
 
         echo "📝 Overwriting: $FILE_PATH"
         mkdir -p "$(dirname "$FILE_PATH")"
@@ -72,7 +71,8 @@ export GIT_AUTHOR_EMAIL="ghost@teamofsix.local"
 PR_TITLE="[Ghost] Trinity #${ACTIVE_TRINITY}: $TITLE"
 
 git add .
-git commit -m "$TITLE\n\n$BODY\n\nFixes #$ACTIVE_TRINITY"
+COMMIT_MSG=$(printf '%s\n\n%s\n\nFixes #%s\n' "$TITLE" "$BODY" "$ACTIVE_TRINITY")
+git commit -m "$COMMIT_MSG"
 
 # --- ARCHITECTURE FIX: Abort immediately if push fails ---
 git push origin "$CURRENT_BRANCH" --force-with-lease || {

@@ -6,7 +6,7 @@
 
 This document walks through the complete TOS development lifecycle in the order you will encounter each step, following the five-phase taxonomy: **create**, **sync**, **write**, **close**, **delete**.
 
-The interactive tutorial at `test/interactive_tutorial.zsh` demonstrates the same lifecycle with a real GitHub repository. Read this document first.
+The interactive tutorial at `docs/tutos/interactive_tutorial.zsh` demonstrates the same lifecycle with a real GitHub repository. Read this document first.
 
 ---
 

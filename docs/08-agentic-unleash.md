@@ -4,7 +4,7 @@
 
 # 08 — Agentic Unleash
 
-The preceding documents have described TOS as a system of constraints: the Trinity mandate, the lock hierarchy, the payload validation, the IPC boundary. It might seem counterintuitive that a system built around constraints could make an AI agent *more* capable rather than less. This document explains why the opposite is true, and describes the advanced workflows that become possible once the failure modes described in [01-llm-pitfalls.md](01-llm-pitfalls.md) have been structurally neutralised.
+The preceding documents have described TOS as a system of constraints: the Trinity mandate, the lock hierarchy, the payload validation, the IPC boundary. It might seem counterintuitive that a system built around constraints could make an AI agent *more* capable rather than less. This document explains why the opposite is true, and describes the advanced workflows that become possible once the failure modes described in [00-llm-pitfalls.md](00-llm-pitfalls.md) have been structurally neutralised.
 
 ---
 

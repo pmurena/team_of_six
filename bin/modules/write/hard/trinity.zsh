@@ -65,7 +65,7 @@ fi
 # === CHECK 5: LOCK STATE MUST BE CLEAN ===
 # Exactly one lock must exist for this project: a HARD_LOCK owned by this Architect.
 # Any other lock pattern indicates a dirty or inconsistent state.
-GLOBAL_LOCKS="$TOS_MNT_ROOT/.ipc/locks"
+GLOBAL_LOCKS="${TOS_LOCKS:-${TOS_MNT_ROOT}/.ipc/locks}"
 ALL_LOCKS=("$GLOBAL_LOCKS/${TOS_ACTIVE_PROJECT}_trinity_"*.lock(N))
 LOCK_COUNT=${#ALL_LOCKS[@]}
 
@@ -115,7 +115,7 @@ echo "✅ All checks passed. Finalizing Trinity #$TOS_ACTIVE_TRINITY..."
 truncate -s 0 "$TOS_INPUT"
 REV_HASH=$(git rev-parse --short HEAD)
 ISSUE_URL=$(gh issue view "$TOS_ACTIVE_TRINITY" --json url -q .url 2>/dev/null || echo "Unknown URL")
-COMMENT="[VERIFIED] Trinity #$TOS_ACTIVE_TRINITY finalized at rev $REV_HASH. Audit Manifest match: OK.\nContext: $ISSUE_URL"
+COMMENT=$(printf '[VERIFIED] Trinity #%s finalized at rev %s. Audit Manifest match: OK.\nContext: %s\n' "$TOS_ACTIVE_TRINITY" "$REV_HASH" "$ISSUE_URL")
 
 gh issue comment "$TOS_ACTIVE_TRINITY" -b "$COMMENT" 2>/dev/null || true
 
@@ -136,5 +136,7 @@ git pull origin main -q
 git branch -D "tos-work-$TOS_ACTIVE_TRINITY" -q 2>/dev/null || true
 
 "$TOS_BIN/utils/lock/release.zsh" "$TOS_ACTIVE_PROJECT"
-"$TOS_BIN/modules/sync/soft/trinity.zsh" "$TOS_ACTIVE_PROJECT" "0"
+# The hard lock is gone and tos-work-N has been deleted on both ends.
+# Force TOS_ACTIVE_TRINITY=0 so the sync does not try to push a dead branch.
+TOS_ACTIVE_TRINITY=0 "$TOS_BIN/modules/sync/soft/trinity.zsh" "$TOS_ACTIVE_PROJECT" "0"
 echo "🏁 Trinity #$TOS_ACTIVE_TRINITY Finalized."

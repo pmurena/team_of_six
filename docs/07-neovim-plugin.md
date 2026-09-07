@@ -22,13 +22,13 @@ This is four manual transfers of text between three different interfaces. Each t
 
 The plugin is built around three core ideas:
 
-**Smart Yanking** — instead of requiring you to manually select payload blocks, the plugin scans the current buffer (your LLM chat buffer) for TOS-formatted blocks matching the command you want to run. For `write code`, it extracts all `TOS_META` and `TOS_FILE` blocks. For `write tasks`, it extracts all `TOS_ISSUE` blocks. For `write comment`, it extracts all `TOS_COMMENT` blocks. The extracted content is written directly to the inbox. You never manually select or copy anything.
+**Smart Yanking** — instead of requiring you to manually select payload blocks, the plugin scans the current buffer (your LLM chat buffer) for TOS-formatted blocks matching the command you want to run. For `write code`, it extracts all `TOS_META` and `TOS_FILE` blocks. For `write issue`, it extracts all `TOS_ISSUE` blocks. For `write comment`, it extracts all `TOS_COMMENT` blocks. The extracted content is written directly to the inbox. You never manually select or copy anything.
 
 **Async Execution** — when a TOS command is triggered from a keymap, the plugin runs it asynchronously via `vim.system`. Neovim remains responsive while the Ghost works. The output appears in a terminal split when the command completes.
 
 **Intelligent Buffer Routing** — when a trinity sync completes, the plugin reads the outbox and routes the Clean Room Snapshot to the appropriate buffer. If you are syncing for your own work (`<leader>6st`), the context goes to your local LLM buffer. If you are syncing for a review or a team handoff (`<leader>6sT`), it goes to a shared global buffer. The LLM always starts its next response with a current, verified context snapshot already in its buffer.
 
-> **Note:** `write` commands (`write code`, `write comment`, `write tasks`) append raw engine output to the current buffer for visibility, but they do not regenerate the outbox context snapshot. The outbox is only refreshed by `sync trinity` and `sync peek`. Do not rely on post-write buffer output as LLM context — always run `sync trinity <N>` to get a clean snapshot before starting a new session.
+> **Note:** `write` commands (`write code`, `write comment`, `write issue`) append raw engine output to the current buffer for visibility, but they do not regenerate the outbox context snapshot. The outbox is only refreshed by `sync trinity` and `sync peek`. Do not rely on post-write buffer output as LLM context — always run `sync trinity <N>` to get a clean snapshot before starting a new session.
 
 ---
 
@@ -54,7 +54,7 @@ All keymaps are in the `<leader>6` namespace — displayed in which-key as "[T]e
 
 | Keymap | Action | Description |
 |--------|--------|-------------|
-| `<leader>6ss` | Sync Start | Provisions the sandbox for the current project. Equivalent to `tos <project> sync start`. Detects the project name from `git rev-parse --show-toplevel`. |
+| `<leader>6ss` | Sync Start | Provisions the sandbox for the current project. Equivalent to `tos <project> sync project`. Detects the project name from `git rev-parse --show-toplevel`. |
 | `<leader>6st` | Sync Trinity (local) | Queries GitHub for open issues and PRs, presents a selection menu, syncs the chosen trinity, and routes the Clean Room Snapshot to the local LLM buffer. |
 | `<leader>6sT` | Sync Trinity (global) | Same as above but routes the context to a global shared buffer. Useful when handing off context to a colleague or a different LLM session. |
 | `<leader>6sp` | Sync Peek | Prompts for a space-separated list of filenames and injects their content into the outbox. Equivalent to `tos <project> sync peek <files>`. |
@@ -65,7 +65,7 @@ All keymaps are in the `<leader>6` namespace — displayed in which-key as "[T]e
 |--------|--------|-------------|
 | `<leader>6wc` | Write Code | Smart-yanks `TOS_META` and `TOS_FILE` blocks from the current buffer, writes them to the inbox, and runs `tos <project> write code`. |
 | `<leader>6wm` | Write Comment | Smart-yanks `TOS_COMMENT` blocks and runs `tos <project> write comment`. |
-| `<leader>6wt` | Write Tasks | Smart-yanks `TOS_ISSUE` blocks and runs `tos <project> write tasks`. |
+| `<leader>6wi` | Write Issue | Smart-yanks `TOS_ISSUE` blocks and runs `tos <project> write issue`. |
 
 ---
 

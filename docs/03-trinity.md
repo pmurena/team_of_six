@@ -10,7 +10,7 @@ The Trinity is the central concept of TOS. Everything else in the system — the
 
 ## The Mandate: 1:1:1
 
-At any given moment, the Ghost operates within exactly one **issue**, one **branch**, and one **feature**. Not approximately one — mechanically, enforced-at-the-lock-level, one. This constraint is called the 1:1:1 mandate, and it is the direct architectural answer to the cognitive collapse problem described in [01-llm-pitfalls.md](01-llm-pitfalls.md).
+At any given moment, the Ghost operates within exactly one **issue**, one **branch**, and one **feature**. Not approximately one — mechanically, enforced-at-the-lock-level, one. This constraint is called the 1:1:1 mandate, and it is the direct architectural answer to the cognitive collapse problem described in [00-llm-pitfalls.md](00-llm-pitfalls.md).
 
 The reasoning is straightforward. LLM reliability degrades non-linearly as task scope expands. A model asked to implement one function according to one specification, with one test to satisfy, will perform significantly better than the same model asked to refactor a module. The Trinity mandate keeps the Ghost's task surface at its theoretical minimum: one thing at a time, always.
 
@@ -42,7 +42,7 @@ The lock files live in `${TOS_MNT_ROOT}/.ipc/locks/` and take the form `<project
 
 Locks are acquired by any command that puts the Architect into a working context. The two commands that acquire locks are:
 
-**`tos <project> sync start`** — provisions the sandbox (clones the repository) and immediately acquires Trinity 0 on the new project. The lock is acquired *after* the clone succeeds. If the clone fails, no lock is created and no sandbox directory exists — the system is left in a clean state.
+**`tos <project> sync project`** — provisions the sandbox (clones the repository) and immediately acquires Trinity 0 on the new project. The lock is acquired *after* the clone succeeds. If the clone fails, no lock is created and no sandbox directory exists — the system is left in a clean state.
 
 **`tos <project> sync trinity <N>`** — transitions to a specific trinity. If N is 0, acquires a soft lock. If N is greater than 0, acquires a hard lock. Before acquiring the new lock, this command checks whether the Architect currently holds a hard lock on this project. If they do, and they are transitioning to a different trinity, it first pushes the current branch to remote — ensuring no work is lost — before releasing the old lock and writing the new one.
 
@@ -86,7 +86,7 @@ The reason this is called a Clean Room Snapshot is that it contains *only* infor
 
 The gateway enforces a write policy based on the active lock type. The rules are:
 
-- **Soft lock + `write tasks`** → permitted. Creating issues is a planning operation, appropriate in Trinity 0.
+- **Soft lock + `write issue`** → permitted. Creating issues is a planning operation, appropriate in Trinity 0.
 - **Soft lock + `write comment`** → permitted. Posting comments is a coordination operation, appropriate in Trinity 0.
 - **Soft lock + `write code`** → blocked. The gateway returns an error: "Trinity 0 is a read-only soft-lock. Sync to a feature Trinity to write code."
 - **Hard lock + any write** → permitted, subject to the hallucination checks.
@@ -97,7 +97,7 @@ The hallucination checks run for all write operations regardless of lock type. T
 
 ## Releasing Locks
 
-Locks are released explicitly by `tos <project> remove <N>`, which finalises a trinity (closes the issue and PR, deletes the local branch) and returns to Trinity 0. The release happens in two steps: first an explicit call to `release.zsh` clears the hard lock, then `sync trinity 0` acquires the soft lock. This two-step approach means that if the trinity-0 acquisition fails (a network error fetching the Clean Room Snapshot from GitHub, for example), the hard lock has already been released. The system may be left without a lock momentarily, but it will not be left with a stale hard lock blocking another Architect.
+Locks are released explicitly by `tos <project> write trinity`, which finalises a trinity (closes the issue and PR, deletes the local branch) and returns to Trinity 0. The release happens in two steps: first an explicit call to `release.zsh` clears the hard lock, then `sync trinity 0` acquires the soft lock. This two-step approach means that if the trinity-0 acquisition fails (a network error fetching the Clean Room Snapshot from GitHub, for example), the hard lock has already been released. The system may be left without a lock momentarily, but it will not be left with a stale hard lock blocking another Architect.
 
 ---
 
