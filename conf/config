@@ -5,3 +5,10 @@ export TOS_LOCKS="${TOS_IPC}/locks"
 export TOS_SANDBOX="${TOS_MNT_ROOT}/sandbox"
 export TOS_BIN="${TOS_MNT_ROOT}/.local/bin"
 export AI_GROUP="team_of_six"
+
+# --- IPC ribbon (per-architect) ----------------------------------------------
+# Resolved at source time from SUDO_USER, which the gateway sets in Stage 1.
+# Do NOT substitute ${TOS_MNT_ROOT} for the literal path below: tos_deploy.zsh
+# rewrites the literal string during deployment.
+export TOS_INPUT=/mnt/team_of_six/.ipc/${SUDO_USER}/inbox.md
+export TOS_CONTEXT=/mnt/team_of_six/.ipc/${SUDO_USER}/outbox.md

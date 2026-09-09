@@ -1,0 +1,109 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# tests/inf/05_config_completeness.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   That the config produced by inf/tos_deploy.zsh defines every variable the
+#   gateway and its modules dereference at runtime.
+#
+# WHY THIS FILE EXISTS
+#   TOS_INPUT and TOS_CONTEXT were absent from conf/config for the entire life
+#   of the project. The gateway reached `tee "$TOS_CONTEXT"` with an empty
+#   string and every real invocation died. The unit suite did not catch it
+#   because tests/shared/zunit_helpers/scaffold.zsh APPENDS its own
+#   `export TOS_CONTEXT=...` to the deployed config — the harness supplied
+#   what production omitted.
+#
+#   These tests deliberately use sandbox_toolkit.zsh, NOT scaffold.zsh, so the
+#   config under assertion is exactly what tos_deploy.zsh produces with no
+#   harness overrides layered on top. Moving them to scaffold.zsh would make
+#   them validate the harness instead of the product.
+# =============================================================================
+
+@setup {
+  source "${PWD}/tests/shared/sandbox_toolkit.zsh"
+  sandbox_provision
+  _DEPLOYED_CONF="${TOS_ROOT}/conf/config"
+}
+
+@teardown {
+  sandbox_destroy
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — every required variable is declared
+# ---------------------------------------------------------------------------
+@test 'Deployed config declares every variable the engine dereferences' {
+  local missing=""
+  local required=(
+    AI_USER AI_GROUP
+    TOS_MNT_ROOT TOS_IPC TOS_LOCKS TOS_SANDBOX TOS_BIN
+    TOS_INPUT TOS_CONTEXT
+  )
+
+  for var in $required; do
+    grep -q "export ${var}=" "$_DEPLOYED_CONF" || missing="${missing} ${var}"
+  done
+
+  if [[ -n "$missing" ]]; then
+    fail "conf/config does not declare:${missing}"
+  fi
+  assert 1 equals 1
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — sourcing it yields non-empty values, not just declarations
+# ---------------------------------------------------------------------------
+# A declaration that expands to an empty string is the failure mode that
+# actually broke production: `tee ""` rather than `tee` with no argument.
+@test 'Sourcing the deployed config yields non-empty IPC paths' {
+  local probe
+  probe=$(
+    SUDO_USER="test_architect" zsh -c "
+      source '${_DEPLOYED_CONF}'
+      print -r -- \"\${TOS_INPUT:-EMPTY}|\${TOS_CONTEXT:-EMPTY}\"
+    "
+  )
+
+  if [[ "$probe" == *EMPTY* ]]; then
+    fail "TOS_INPUT/TOS_CONTEXT expand to empty after sourcing: ${probe}"
+  fi
+  assert 1 equals 1
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — the IPC paths follow SUDO_USER, not a baked-in name
+# ---------------------------------------------------------------------------
+# Multi-tenant operation depends on each Architect resolving to their own
+# ribbon. A literal username here would silently cross-wire two architects.
+@test 'IPC paths resolve per-architect from SUDO_USER' {
+  local probe_a probe_b
+  probe_a=$(SUDO_USER="architect_a" zsh -c "source '${_DEPLOYED_CONF}'; print -r -- \$TOS_INPUT")
+  probe_b=$(SUDO_USER="architect_b" zsh -c "source '${_DEPLOYED_CONF}'; print -r -- \$TOS_INPUT")
+
+  if [[ "$probe_a" == "$probe_b" ]]; then
+    fail "TOS_INPUT is identical for two architects: ${probe_a}"
+  fi
+
+  [[ "$probe_a" == *architect_a* ]] || fail "TOS_INPUT does not contain architect_a: ${probe_a}"
+  assert 1 equals 1
+}
+
+# ---------------------------------------------------------------------------
+# TEST 4 — deployment rewrote the literal mount root
+# ---------------------------------------------------------------------------
+# tos_deploy.zsh seds the literal /mnt/team_of_six to the target root. If a
+# new config line hardcodes the path in a form the sed misses, the test
+# sandbox silently points at the production mount.
+@test 'Deployed config contains no unrewritten production mount path' {
+  if [[ "$TOS_MNT_ROOT" == "/mnt/team_of_six" ]]; then
+    echo "SKIP: deployed to the production root; nothing to rewrite." >&2
+    assert 1 equals 1
+    return 0
+  fi
+
+  if grep -q "/mnt/team_of_six" "$_DEPLOYED_CONF"; then
+    fail "Deployed config still references /mnt/team_of_six despite --mnt-root"
+  fi
+  assert 1 equals 1
+}
