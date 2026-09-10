@@ -33,6 +33,7 @@
 }
 
 @test 'Path: gateway resolves the sandboxed config, not production' {
-  run zsh -c "source '$TOS_ROOT/conf/config'; print -r -- \$TOS_LOCKS"
-  assert "$output" matches '/tmp/tos_test_'
+  local probe
+  probe=$( source "$TOS_ROOT/conf/config"; print -r -- "$TOS_LOCKS" )
+  assert "$probe" matches '/tmp/tos_test_'
 }
