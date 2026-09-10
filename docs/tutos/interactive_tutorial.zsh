@@ -103,7 +103,7 @@ _cleanup() {
         echo "    Workspace preserved for inspection: $WORKDIR"
     fi
     echo "${DIM}To remove the test repository and sandbox afterwards, run:${NC}"
-    echo "${DIM}    sudo ./inf/post_test_cleanup.zsh${NC}"
+    echo "${DIM}    ./inf/post_test_cleanup.zsh${NC}"
 }
 trap _cleanup EXIT
 
@@ -571,5 +571,5 @@ echo ""
 echo "The remote repository still exists: ${BOLD}https://github.com/${GH_LOGIN}/${TEST_REPO}${NC}"
 echo "Your local working copy: ${BOLD}${WORKDIR}/${TEST_REPO}${NC}"
 echo ""
-echo "To purge both, run: ${BOLD}sudo ./inf/post_test_cleanup.zsh${NC}"
+echo "To purge both, run: ${BOLD}./inf/post_test_cleanup.zsh${NC}"
 echo ""

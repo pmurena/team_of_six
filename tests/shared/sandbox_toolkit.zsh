@@ -14,6 +14,17 @@ sandbox_provision() {
     "${REPO_ROOT}/inf/tos_deploy.zsh" --mnt-root "$TEST_MNT_ROOT" --test-mode > /dev/null
     
     # Export Engine Context
+    #
+    # TOS_MNT_ROOT MUST be exported. The gateway resolves its config with
+    #   export TOS_MNT_ROOT="${TOS_MNT_ROOT:-${BIN_DIR:h:h}}"
+    # so an inherited value from /etc/profile.d/tos.sh wins, and the gateway
+    # silently sources the PRODUCTION config instead of the sandboxed one.
+    #
+    # Only this variable is exported here. Everything downstream — TOS_LOCKS,
+    # TOS_SANDBOX, TOS_INPUT, TOS_CONTEXT — is deliberately left to the
+    # deployed config, so these tests exercise the real resolution chain
+    # rather than a set of values the harness supplied to itself.
+    export TOS_MNT_ROOT="$TEST_MNT_ROOT"
     export TOS_ROOT="${TEST_MNT_ROOT}/.local"
     export TOS_BIN="${TOS_ROOT}/bin"
     export TOS_WORKSPACE="${TEST_MNT_ROOT}/sandbox/$USER"

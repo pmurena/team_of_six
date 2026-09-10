@@ -182,7 +182,7 @@ If the gateway runs and shows the usage message, the installation is working.
 After a tutorial or test session, run:
 
 ```zsh
-sudo ./inf/post_test_cleanup.zsh
+./inf/post_test_cleanup.zsh
 ```
 
 This acquires the `delete_repo` scope interactively, deletes test repositories from GitHub, removes local and sandbox directories, and offers to revoke the elevated scope on exit.

@@ -23,3 +23,16 @@
 @test 'Path: Configuration file is mirrored' {
   assert "$TOS_ROOT/conf/config" is_file
 }
+
+# The gateway takes TOS_MNT_ROOT from the environment when it is already set.
+# /etc/profile.d/tos.sh sets it in every login shell, so without an explicit
+# export here the whole suite runs against the production control plane while
+# appearing to be sandboxed. Assert the isolation directly.
+@test 'Path: TOS_MNT_ROOT is isolated to the sandbox' {
+  assert "$TOS_MNT_ROOT" matches '/tmp/tos_test_'
+}
+
+@test 'Path: gateway resolves the sandboxed config, not production' {
+  run zsh -c "source '$TOS_ROOT/conf/config'; print -r -- \$TOS_LOCKS"
+  assert "$output" matches '/tmp/tos_test_'
+}
