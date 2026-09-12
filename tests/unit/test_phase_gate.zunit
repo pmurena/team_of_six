@@ -105,6 +105,8 @@
     phase_mock_review 102 APPROVED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->GREEN] nothing"
     run zsh "$_V" apply team_of_six 1
     if [[ "$state" -eq 0 ]]; then fail "Applied a same-phase tag"; fi
+    # zunit flags a test that runs no assertion on its pass path as risky.
+    assert "$(phase_mock_current 1)" same_as "green"
 }
 
 # ---------------------------------------------------------------------------

@@ -203,24 +203,32 @@ if [[ "$SRC" != "$CURRENT" ]]; then
     would perform a transition you did not intend. Re-review from ${CURRENT}."
 fi
 
-# same-phase tags are rejected outright (invariant 4)
-if (( SRC_IDX == TGT_IDX )); then
-    _die "[invariant 4] ${SRC}->${TGT} is not a transition. Source and target are the same phase."
+# invariant 4 — forward-only, exactly one step, verdict APPROVED.
+#
+# The gate does not move backwards and does not skip. The exit from a wrong
+# phase is `close trinity`, which restores the pre-Trinity state and returns
+# the issue to the backlog. With a real exit available, retreats buy nothing
+# and cost the arbitrary-jump deadlocks this gate exists to prevent.
+if (( TGT_IDX != SRC_IDX + 1 )); then
+    if (( TGT_IDX <= SRC_IDX )); then
+        _die "[invariant 4] ${SRC}->${TGT} is not forward. The phase gate advances
+    one step at a time and never retreats.
+    To abandon this Trinity and return the issue to the backlog:
+      tos ${PROJECT} close trinity"
+    else
+        _die "[invariant 4] ${SRC}->${TGT} skips a phase. The gate advances exactly
+    one step: the only legal move from ${SRC} is ${PHASES[$(( SRC_IDX + 2 ))]}.
+    A phase with nothing to do still needs its approval."
+    fi
 fi
 
-# invariant 4 — verdict must agree with direction
-if (( TGT_IDX > SRC_IDX )); then
-    DIRECTION="forward"
-    if [[ "$C_STATE" != "APPROVED" ]]; then
-        _die "[invariant 4] verdict is ${C_STATE} but ${SRC}->${TGT} is an advance —
-    use --approve, or correct the tag."
-    fi
-else
-    DIRECTION="backward"
-    if [[ "$C_STATE" != "CHANGES_REQUESTED" ]]; then
-        _die "[invariant 4] verdict is ${C_STATE} but ${SRC}->${TGT} is a retreat —
-    use --request-changes, or correct the tag."
-    fi
+# Every transition is an advance, so every transition requires an approval.
+# A review requesting changes is answered with `write code`; it does not move
+# the phase.
+if [[ "$C_STATE" != "APPROVED" ]]; then
+    _die "[invariant 4] verdict is ${C_STATE}, but advancing ${SRC}->${TGT} requires
+    --approve. A review requesting changes leaves the phase where it is; the
+    Agent answers it with write code."
 fi
 
 # invariants 2, 6, 8 on the incoming review
