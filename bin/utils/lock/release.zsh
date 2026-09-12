@@ -8,7 +8,7 @@ for file in "$GLOBAL_LOCKS/${PROJECT_NAME}_trinity_"*.lock(N); do
     [[ -f "$file" ]] || continue
     LOCK_FOUND=true
     if grep -q "^${SUDO_USER}:" "$file"; then
-        rm -f "$file" "${file%.lock}.manifest"
+        rm -f "$file" "${file%.lock}.manifest" "${file%.lock}.phase"
         echo "🔓 Lock released for $PROJECT_NAME."
         exit 0
     else

@@ -33,3 +33,20 @@ if ! gh pr create --draft --title "Trinity #$TRINITY_ID" --body "Fixes #$TRINITY
     echo "🚨 [ERROR] create trinity: Failed to create pull request." >&2
     exit 1
 fi
+
+# 4. PHASE GATE — initialise the phase record at red.
+# Written only after the PR exists: the record refers to reviews on that PR,
+# and a record without a PR is unvalidatable from birth.
+GLOBAL_LOCKS="${TOS_LOCKS:-${TOS_MNT_ROOT}/.ipc/locks}"
+PHASE_FILE="${GLOBAL_LOCKS}/${TOS_ACTIVE_PROJECT}_trinity_${TRINITY_ID}.phase"
+umask 077
+{
+    echo "current=red"
+    echo "red="
+    echo "green="
+    echo "refactor="
+    echo "retrospect="
+} > "$PHASE_FILE"
+echo "🔴 Phase record initialised at red."
+echo "   Advance with a tagged review, then: tos $TOS_ACTIVE_PROJECT write phase"
+echo "     gh pr review tos-work-$TRINITY_ID --approve --body \"[PHASE:RED->GREEN] ...\""

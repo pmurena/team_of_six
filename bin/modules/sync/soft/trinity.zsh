@@ -107,6 +107,20 @@ echo "TARGET_TRINITY=$NEW_TRINITY"
 echo "BRANCH=$TARGET_BRANCH"
 echo "GENERATED=$(date '+%Y-%m-%d %H:%M:%S')"
 
+# PHASE GATE — the snapshot must not carry an unvalidated phase. Every read
+# validates in full (invariant 7); there is no fast path. A failure here halts
+# the sync rather than emitting a phase the Agent would act on confidently.
+if [[ "$NEW_TRINITY" != "0" ]]; then
+    PHASE_NOW=$("$TOS_BIN/utils/phase_validate.zsh" verify "$PROJECT_NAME" "$NEW_TRINITY") || {
+        echo "" >&2
+        echo "🚨 FATAL: the phase record failed validation. No snapshot emitted." >&2
+        echo "    The Agent must not receive a context whose phase cannot be trusted." >&2
+        echo "    Recovery: tos $PROJECT_NAME close trinity" >&2
+        exit 1
+    }
+    echo "PHASE=$PHASE_NOW"
+fi
+
 if [[ "$NEW_TRINITY" != "0" ]]; then
     echo ""
     echo "## ISSUE #$NEW_TRINITY"

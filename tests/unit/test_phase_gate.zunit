@@ -1,0 +1,150 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# tests/unit/test_phase_gate.zunit
+# =============================================================================
+# The phase gate is FORWARD-ONLY.
+#
+# A transition must advance exactly one step (red → green → refactor →
+# retrospect) and carry an APPROVED verdict. Backward transitions and skips
+# are refused. `--request-changes` is an ordinary review the Agent answers
+# via `write code`; it does not move the phase.
+#
+# The exit from a wrong phase is `close trinity`, which restores the
+# pre-Trinity state and returns the issue to the backlog. That is why
+# backward transitions are unnecessary — and why allowing them would
+# reintroduce the arbitrary-jump deadlocks the gate exists to prevent.
+# =============================================================================
+
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/phase_mocks.zsh"
+    scaffold_setUp
+    phase_mock_setup
+    export TOS_ACTIVE_PROJECT="team_of_six"
+    _V="${TOS_MNT_ROOT}/.local/bin/utils/phase_validate.zsh"
+}
+
+@teardown {
+    phase_mock_teardown
+    scaffold_tearDown
+}
+
+# A settled red→green transition, recorded and still present on the PR.
+_seed_green() {
+    phase_mock_review 101 APPROVED "$PHASE_C1" "2026-01-01T10:00:00Z" pat "[PHASE:RED->GREEN] contract agreed"
+    phase_mock_record 1 green "101:${PHASE_C1}:2026-01-01T10:00:00Z"
+}
+
+# ---------------------------------------------------------------------------
+# VERIFY
+# ---------------------------------------------------------------------------
+@test '[verify — positive] A consistent record validates and reports its phase' {
+    _seed_green
+    run zsh "$_V" verify team_of_six 1
+    assert "$state" equals 0
+    assert "$output" same_as "green"
+}
+
+@test '[verify — negative] A recorded review deleted from the PR refuses' {
+    phase_mock_record 1 green "101:${PHASE_C1}:2026-01-01T10:00:00Z"
+    run zsh "$_V" verify team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Validated a record whose review no longer exists"; fi
+    assert "$output" contains "invariant 2"
+}
+
+@test '[verify — negative] No phase record at all refuses with recovery advice' {
+    run zsh "$_V" verify team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Validated a nonexistent record"; fi
+    assert "$output" contains "close trinity"
+}
+
+# ---------------------------------------------------------------------------
+# FORWARD-ONLY
+# ---------------------------------------------------------------------------
+@test '[apply — positive] One step forward with APPROVED advances the phase' {
+    _seed_green
+    phase_mock_review 102 APPROVED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->REFACTOR] implementation satisfies the contract"
+    run zsh "$_V" apply team_of_six 1
+    assert "$state" equals 0
+    assert "$output" same_as "refactor"
+    assert "$(phase_mock_current 1)" same_as "refactor"
+}
+
+@test '[apply — negative] A backward transition is refused outright' {
+    _seed_green
+    phase_mock_review 102 CHANGES_REQUESTED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->RED] start over"
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Applied a backward transition — the gate is forward-only"; fi
+    assert "$output" contains "forward"
+    assert "$(phase_mock_current 1)" same_as "green"
+}
+
+@test '[apply — negative] Skipping a phase is refused' {
+    _seed_green
+    phase_mock_review 102 APPROVED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->RETROSPECT] skip the refactor"
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Applied a two-step jump"; fi
+    assert "$(phase_mock_current 1)" same_as "green"
+}
+
+@test '[apply — negative] CHANGES_REQUESTED never moves the phase' {
+    _seed_green
+    phase_mock_review 102 CHANGES_REQUESTED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->REFACTOR] not yet"
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "A CHANGES_REQUESTED review advanced the phase"; fi
+    assert "$(phase_mock_current 1)" same_as "green"
+}
+
+@test '[apply — negative] Same-phase tag is not a transition' {
+    _seed_green
+    phase_mock_review 102 APPROVED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->GREEN] nothing"
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Applied a same-phase tag"; fi
+}
+
+# ---------------------------------------------------------------------------
+# INVARIANTS
+# ---------------------------------------------------------------------------
+@test '[invariant 3] A tag whose source is not the current phase is stale' {
+    _seed_green
+    phase_mock_review 102 APPROVED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:REFACTOR->RETROSPECT] x"
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Applied a tag written against a superseded state"; fi
+    assert "$output" contains "invariant 3"
+}
+
+@test '[invariant 6] A review whose commit was force-pushed away is refused' {
+    _seed_green
+    phase_mock_review 102 APPROVED "$PHASE_ORPHAN" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->REFACTOR] x"
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Accepted an approval attesting to a commit not in the branch"; fi
+    assert "$output" contains "invariant 6"
+}
+
+@test '[invariant 8] The Ghost cannot approve its own phase transition' {
+    _seed_green
+    phase_mock_review 102 APPROVED "$PHASE_C2" "2026-01-02T10:00:00Z" ghost-bot "[PHASE:GREEN->REFACTOR] x"
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "The Ghost self-approved — it is a gatekeeper, not an authority"; fi
+    assert "$output" contains "invariant 8"
+}
+
+@test '[latest wins] The most recent unconsumed review is the one applied' {
+    _seed_green
+    phase_mock_review 102 APPROVED "$PHASE_C2" "2026-01-02T10:00:00Z" pat "[PHASE:GREEN->REFACTOR] first"
+    phase_mock_review 103 APPROVED "$PHASE_C2" "2026-01-03T10:00:00Z" pat "[PHASE:GREEN->REFACTOR] on reflection"
+    run zsh "$_V" apply team_of_six 1
+    assert "$state" equals 0
+    assert "$(phase_mock_current 1)" same_as "refactor"
+    if ! grep -q "green=103:" "${TOS_LOCKS}/team_of_six_trinity_1.phase"; then
+        fail "Recorded the older review; latest must win"
+    fi
+}
+
+@test '[no new tag] A consumed review is not offered again' {
+    _seed_green
+    run zsh "$_V" apply team_of_six 1
+    if [[ "$state" -eq 0 ]]; then fail "Re-applied a review already consumed by a slot"; fi
+    assert "$output" contains "No new transition tag"
+}

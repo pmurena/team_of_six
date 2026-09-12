@@ -18,6 +18,19 @@
 # ==============================================================================
 [[ -z "$SUDO_USER" || "$TOS_CONTROLLER_LOCKED" != "true" ]] && exit 1
 
+# === CHECK 0: PHASE MUST BE RETROSPECT ===
+# Runs before everything else: it is the coarsest gate and gives the clearest
+# diagnostic. Merging a feature whose Retrospective never happened is the
+# failure this catches.
+_PHASE_NOW=$("$TOS_BIN/utils/phase_validate.zsh" verify "$TOS_ACTIVE_PROJECT" "$TOS_ACTIVE_TRINITY") || exit 1
+if [[ "$_PHASE_NOW" != "retrospect" ]]; then
+    echo "🚨 [ERROR] write trinity: the Trinity is in '${_PHASE_NOW}', not 'retrospect'." >&2
+    echo "    A Trinity cannot be merged until its Retrospective has been completed" >&2
+    echo "    and approved. Advance the phase with a tagged review, then:" >&2
+    echo "      tos $TOS_ACTIVE_PROJECT write phase" >&2
+    exit 1
+fi
+
 # === CHECK 1: INBOX MUST NOT BE EMPTY ===
 if [[ ! -s "$TOS_INPUT" ]]; then
     echo "🚨 [ERROR] write trinity: Inbox is empty." >&2
