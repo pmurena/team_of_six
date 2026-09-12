@@ -12,6 +12,7 @@
 }
 @teardown { scaffold_tearDown; }
 
+
 @test '[sync project — positive] Provisions sandbox, clones repo, acquires SOFT_LOCK' {
     rm -rf "${_SANDBOX_PROJECT}"
     cat > "${TOS_INBOX}" <<'PAYLOAD'
@@ -24,25 +25,32 @@ PAYLOAD
     mkdir -p "${TOS_MOCK_BIN}"
     export PATH="${TOS_MOCK_BIN}:$PATH"
 
-	cat > "${TOS_MOCK_BIN}/git" <<'INNER'
-	#!/usr/bin/env zsh
-	if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
-	if [[ "$*" == *"clone"* ]]; then
-		# Respect the deployed sandbox path from the active test environment
-		target_dir="${TOS_SANDBOX:-${TOS_MNT_ROOT}/sandbox}/${TOS_ACTIVE_PROJECT:-team_of_six}"
-		mkdir -p "$target_dir"
-		exit 0
-	fi
-	exit 0
+    cat > "${TOS_MOCK_BIN}/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"clone"* ]]; then
+    # Respect the deployed sandbox path from the active test environment
+    target_dir="${TOS_SANDBOX:-${TOS_MNT_ROOT}/sandbox}/${TOS_ACTIVE_PROJECT:-team_of_six}"
+    mkdir -p "$target_dir"
+    exit 0
+fi
+exit 0
 INNER
-
     chmod +x "${TOS_MOCK_BIN}/git"
+
+    cat > "${TOS_MOCK_BIN}/gh" <<'INNER'
+#!/usr/bin/env zsh
+# sync project derives the remote from GitHub rather than reading the
+# Architect's working directory (ADR: Pre-Escalation Caller Verification).
+if [[ "$*" == *"repo view"* ]]; then echo "test/team_of_six"; exit 0; fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/gh"
+
     zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six sync project >/dev/null 2>&1 || true
-    
+
     assert 1 equals 1
     if [[ ! -d "${_SANDBOX_PROJECT}" ]]; then fail "Sandbox not provisioned"; fi
 }
-
 @test '[sync project — negative] Second call rejected when sandbox already exists' {
     mkdir -p "${_SANDBOX_PROJECT}"
     git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true

@@ -19,6 +19,47 @@
     unset GH_TOKEN
 }
 
+# The behavioural version of this test would need real privilege separation,
+# which the harness deliberately mocks away. This is therefore a STRUCTURAL
+# assertion: caller-location verification must appear before the sudo
+# escalation in the gateway source. Crude, but it pins the one property that
+# cannot be recovered once it regresses — see ADR: Pre-Escalation Caller
+# Verification.
+@test 'Caller verification appears before the sudo escalation' {
+  local src="${TOS_MNT_ROOT}/.local/bin/tos.zsh"
+  local line_check line_escalate
+
+  line_check=$(grep -n 'STAGE 0: CALLER LOCATION VERIFICATION' "$src" | head -1 | cut -d: -f1)
+  line_escalate=$(grep -n 'exec sudo -n -u' "$src" | head -1 | cut -d: -f1)
+
+  if [[ -z "$line_check" ]]; then
+    fail 'No Stage 0 caller verification block found in the gateway'
+  fi
+  if [[ -z "$line_escalate" ]]; then
+    fail 'No sudo escalation found in the gateway'
+  fi
+  if (( line_check > line_escalate )); then
+    fail "Caller verification (line $line_check) runs AFTER escalation (line $line_escalate) — the Ghost would read the Architect's tree"
+  fi
+  assert 1 equals 1
+}
+
+@test 'No gateway stage reads the Architect tree after escalation' {
+  local src="${TOS_MNT_ROOT}/.local/bin/tos.zsh"
+  local line_escalate
+  line_escalate=$(grep -n 'exec sudo -n -u' "$src" | head -1 | cut -d: -f1)
+
+  # Any bare 'git remote get-url' after the escalation line runs as the Ghost
+  # in the Architect's cwd.
+  local offender
+  offender=$(awk -v start="$line_escalate" 'NR > start && /git remote get-url/ { print NR": "$0 }' "$src")
+
+  if [[ -n "$offender" ]]; then
+    fail "Post-escalation read of the Architect tree: $offender"
+  fi
+  assert 1 equals 1
+}
+
 @test 'Direct module invocation without TOS_CONTROLLER_LOCKED is inert' {
     local test_mod="${TOS_MNT_ROOT}/.local/bin/modules/testmod/soft"
     mkdir -p "${test_mod}"

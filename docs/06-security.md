@@ -22,6 +22,48 @@ TOS operates on a principle of layered, explicit trust. No component trusts any 
 
 ---
 
+## The Ghost Never Reads the Architect's Filesystem
+
+This is the load-bearing invariant of the sandbox model, and it constrains
+where checks may be placed, not merely what they do.
+
+The gateway escalates to the Ghost in Stage 1. Every line after that point
+executes as `team_of_six`. Any check that inspects the Architect's working
+directory must therefore run **before** Stage 1 — in Stage 0 — or it becomes
+the Ghost reading the Architect's tree.
+
+Caller-location verification (project-name matching and the Typo Guard) lives
+in Stage 0 for exactly this reason. It is the Architect's own filesystem, so
+the Architect is the correct actor to inspect it.
+
+The practical consequence is that the Architect's project directory needs no
+particular permissions. A `0700` home, an encrypted home mount, or a
+`mktemp -d` working directory are all fine — the Ghost never looks.
+
+> **For contributors:** a module that calls `git`, `ls`, or `cat` on a path
+> outside `${TOS_MNT_ROOT}` is a bug, however convenient. The value it wants
+> is almost always available from `gh` or from the sandbox clone instead.
+
+---
+
+## Prerequisite: git must be able to authenticate
+
+`gh auth login` authenticates the `gh` CLI. It does **not** authenticate
+`git` — gh stores its token in `~/.config/gh/hosts.yml`, and plain `git`
+only reaches it through a credential helper. Run:
+
+```zsh
+gh auth setup-git
+```
+
+Without this, the Architect's own clones, pulls, and pushes fall back to
+interactive password prompts, which GitHub has rejected since 2021. The
+Ghost is unaffected — it builds an authenticated URL from the token in
+`.token` — so the failure appears only on the Architect side and looks
+unrelated to TOS.
+
+---
+
 ## The Sudo Gateway
 
 The privilege separation between Architect and Ghost is enforced by `sudo`. The `tos` binary runs as the Architect's user. When it determines the user is not `team_of_six`, it re-executes itself via:

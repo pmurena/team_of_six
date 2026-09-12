@@ -4,16 +4,19 @@
 PROJECT_NAME="$1"
 
 echo "🚀 Provisioning Sandbox for $PROJECT_NAME..."
-REMOTE_URL=$(git remote get-url origin 2>/dev/null)
-[[ -z "$REMOTE_URL" ]] && { echo "⛔ ERROR: Run this from an initialized Architect repo."; exit 1; }
+# Derive the remote from GitHub, NOT from the Architect's working directory.
+# This module runs as the Ghost; reading the Architect's tree here would
+# breach sandbox isolation and fails outright on a non-traversable directory.
+REPO_FULL=$(gh repo view "$PROJECT_NAME" --json nameWithOwner -q .nameWithOwner 2>/dev/null)
+[[ -z "$REPO_FULL" ]] && { echo "⛔ ERROR: No GitHub repository named '$PROJECT_NAME' is visible to the Ghost."; exit 1; }
+REMOTE_URL="https://github.com/${REPO_FULL}.git"
 
 SANDBOX_DIR="$TOS_SANDBOX/$PROJECT_NAME"
 [[ -d "$SANDBOX_DIR" ]] && { echo "⛔ ERROR: Sandbox already exists."; exit 1; }
 
 [[ -z "$GH_TOKEN" ]] && { echo "⛔ ERROR: GH_TOKEN is not set by the gateway."; exit 1; }
 
-REPO_PATH=$(echo "$REMOTE_URL" | sed -e 's/.*github.com[:/]//' -e 's/\.git$//')
-AUTH_URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO_PATH}.git"
+AUTH_URL="https://x-access-token:${GH_TOKEN}@github.com/${REPO_FULL}.git"
 
 umask 077
 mkdir -p "$TOS_SANDBOX" && cd "$TOS_SANDBOX" || exit 1
