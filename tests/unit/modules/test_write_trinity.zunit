@@ -40,6 +40,13 @@ INNEREOF
     cat > "${TOS_MOCK_BIN}/gh" <<'INNEREOF'
 #!/usr/bin/env zsh
 echo "$*" >> /tmp/tos_mock_gh_calls.log
+# CHECK 0 runs the phase gate before CHECK 1, and the validator resolves the
+# repository, the PR and the Ghost login before it can report a phase. Without
+# these branches it dies on "No GitHub repository visible to the Ghost" and the
+# MANIFEST audit under test is never reached.
+if [[ "$*" == *"repo view"* ]]; then echo "test/team_of_six"; exit 0; fi
+if [[ "$*" == *"pr view"* ]]; then echo "7"; exit 0; fi
+if [[ "$1" == "api" && "$2" == "user" ]]; then echo "test_architect"; exit 0; fi
 exit 0
 INNEREOF
     chmod +x "${TOS_MOCK_BIN}/gh"
@@ -74,6 +81,11 @@ INNEREOF
     
     echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
     printf "calculator.zsh\ntest_calculator.zsh\n" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    # The phase gate refuses to merge outside retrospect. These tests exercise
+    # the MANIFEST audit, not the phase gate, so the Trinity is seeded at the
+    # only phase from which a merge is legal. Slots are left empty: with none
+    # recorded the validator has no reviews to re-resolve.
+    printf "current=retrospect\nred=\ngreen=\nrefactor=\nretrospect=\n" > "${TOS_LOCKS}/team_of_six_trinity_1.phase"
     export TOS_ACTIVE_TRINITY="1"
 }
 

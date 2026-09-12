@@ -138,6 +138,11 @@ TARGET_TRINITY=0
 ===TOS_META_END===
 PAYLOAD
 
+    # The snapshot validates the phase in full before emitting PHASE=, and
+    # halts the sync if the record is missing. This test is about the handover
+    # not pushing tos-work-0, so the destination Trinity is given a record.
+    printf "current=red\nred=\ngreen=\nrefactor=\nretrospect=\n" > "${TOS_LOCKS}/team_of_six_trinity_1.phase"
+
     export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
     mkdir -p "${TOS_MOCK_BIN}"
     export PATH="${TOS_MOCK_BIN}:$PATH"
@@ -154,6 +159,19 @@ fi
 exit 0
 INNER
     chmod +x "${TOS_MOCK_BIN}/git"
+
+    # The validator resolves the repository, the PR and the Ghost login before
+    # it can report a phase. The generic mock returns empty output, which kills
+    # it before the handover under test happens.
+    cat > "${TOS_MOCK_BIN}/gh" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"repo view"* ]]; then echo "test/team_of_six"; exit 0; fi
+if [[ "$*" == *"pr view"* ]]; then echo "7"; exit 0; fi
+if [[ "$1" == "api" && "$2" == "user" ]]; then echo "test_architect"; exit 0; fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/gh"
+
     rm -f /tmp/tos_mock_git_push.log
     
     local exit_code=0

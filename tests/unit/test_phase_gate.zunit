@@ -23,17 +23,21 @@
     phase_mock_setup
     export TOS_ACTIVE_PROJECT="team_of_six"
     _V="${TOS_MNT_ROOT}/.local/bin/utils/phase_validate.zsh"
+
+    # A settled red→green transition, recorded and still present on the PR.
+    #
+    # Defined HERE rather than at file scope: zunit compiles each @test body
+    # into an isolated function that cannot see file-scope definitions. A
+    # helper declared outside @setup fails with "command not found".
+    _seed_green() {
+        phase_mock_review 101 APPROVED "$PHASE_C1" "2026-01-01T10:00:00Z" pat "[PHASE:RED->GREEN] contract agreed"
+        phase_mock_record 1 green "101:${PHASE_C1}:2026-01-01T10:00:00Z"
+    }
 }
 
 @teardown {
     phase_mock_teardown
     scaffold_tearDown
-}
-
-# A settled red→green transition, recorded and still present on the PR.
-_seed_green() {
-    phase_mock_review 101 APPROVED "$PHASE_C1" "2026-01-01T10:00:00Z" pat "[PHASE:RED->GREEN] contract agreed"
-    phase_mock_record 1 green "101:${PHASE_C1}:2026-01-01T10:00:00Z"
 }
 
 # ---------------------------------------------------------------------------
