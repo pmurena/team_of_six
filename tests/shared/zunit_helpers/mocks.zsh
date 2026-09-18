@@ -1,0 +1,262 @@
+#!/usr/bin/env zsh
+# =============================================================================
+# test/helpers/mocks.zsh
+# =============================================================================
+# PURPOSE
+#   Replaces the real `gh`, `git`, and `sudo` binaries with zsh functions that
+#   live only in the current shell's namespace. Because zsh resolves function
+#   names before PATH lookups, these definitions shadow the real commands for
+#   any code sourced afterwards in the same shell session.
+#
+# HOW FUNCTION-OVERRIDE MOCKING WORKS (for readers new to shell testing)
+#   In zsh you can define a function with the same name as an external binary:
+#
+#       function git() { echo "fake git called with: $*"; }
+#
+#   After this definition, every invocation of `git` inside the same shell
+#   (or any script sourced into it) runs YOUR function, not /usr/bin/git.
+#   This is the primary mocking mechanism used throughout TOS tests.
+#
+# CONTROLLING MOCK BEHAVIOUR PER-TEST
+#   Tests set shell variables before invoking the gateway:
+#
+#       TOS_MOCK_GH_OUTPUT  — text that mock `gh` prints to stdout
+#       TOS_MOCK_GH_EXIT    — integer exit code mock `gh` returns (default 0)
+#       TOS_MOCK_GIT_OUTPUT — text that mock `git` prints to stdout
+#       TOS_MOCK_GIT_EXIT   — integer exit code mock `git` returns (default 0)
+#
+#   Call reset_mocks between tests to clear both the logs and these variables.
+#
+# LOG FILES
+#   Every call appends its full argument list to a log file:
+#       /tmp/tos_mock_gh_calls.log
+#       /tmp/tos_mock_git_calls.log
+#
+#   Assertions read these files via assert_mock_called / assert_mock_not_called.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# gh — GitHub CLI mock
+# ---------------------------------------------------------------------------
+function gh() {
+    # 1. LOG EVERYTHING IMMEDIATELY
+    echo "gh $*" >> /tmp/tos_mock_gh_calls.log
+
+    # 2. Extract verb for exit code overrides (skipping flags)
+    local verb
+    for arg in "$@"; do
+        [[ "$arg" != -* ]] && { verb="$arg"; break; }
+    done
+
+    # 3. Handle overrides
+    local override_var="TOS_MOCK_GH_EXIT_${verb}"
+    local exit_code="${(P)override_var:-${TOS_MOCK_GH_EXIT:-0}}"
+    return $(( exit_code ))
+}
+# ---------------------------------------------------------------------------
+# git — Git mock
+# ---------------------------------------------------------------------------
+function git() {
+    echo "$*" >> /tmp/tos_mock_git_calls.log
+
+    # Allow per-verb overrides (e.g. TOS_MOCK_GIT_EXIT_push=1).
+    local verb="${1:-}"
+    local override_var="TOS_MOCK_GIT_EXIT_${verb}"
+    local exit_code="${(P)override_var:-${TOS_MOCK_GIT_EXIT:-0}}"
+
+    echo "${TOS_MOCK_GIT_OUTPUT:-}"
+
+    return $(( exit_code ))
+}
+
+# ---------------------------------------------------------------------------
+# sudo — privilege-escalation mock
+# ---------------------------------------------------------------------------
+# The real TOS gateway calls: sudo -n -u team_of_six <command> [args...]
+# This mock strips those three flags and executes the remainder directly,
+# so the command runs as the test user without requiring actual sudo.
+#
+# "$@" expands as separate quoted words (safer than "$*").
+# "shift" pops the first positional argument; three shifts remove -n -u user.
+function sudo() {
+    shift  # drop -n
+    shift  # drop -u
+    shift  # drop team_of_six (or whatever user was specified)
+    "$@"   # execute the remaining command in the current shell
+}
+
+# ---------------------------------------------------------------------------
+# assert_mock_called <log_file> <expected_substring>
+# ---------------------------------------------------------------------------
+# Reads the given log file and returns 0 if any line contains the substring.
+# Returns 1 (and prints a diagnostic) if no match is found.
+#
+# Usage:
+#   assert_mock_called /tmp/tos_mock_gh_calls.log "pr merge --squash"
+function assert_mock_called() {
+    local log_file="$1"
+    local expected="$2"
+
+    if grep -qF "${expected}" "${log_file}" 2>/dev/null; then
+        return 0
+    else
+        echo "ASSERT FAIL: expected mock call containing '${expected}'" >&2
+        echo "  Log contents of ${log_file}:" >&2
+        cat "${log_file}" 2>/dev/null | sed 's/^/    /' >&2
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# assert_mock_not_called <log_file> <unexpected_substring>
+# ---------------------------------------------------------------------------
+# Returns 0 if the substring does NOT appear in the log (i.e. call was NOT made).
+function assert_mock_not_called() {
+    local log_file="$1"
+    local unexpected="$2"
+
+    if grep -qF "${unexpected}" "${log_file}" 2>/dev/null; then
+        echo "ASSERT FAIL: unexpected mock call found: '${unexpected}'" >&2
+        echo "  Log contents of ${log_file}:" >&2
+        cat "${log_file}" 2>/dev/null | sed 's/^/    /' >&2
+        return 1
+    else
+        return 0
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# assert_mock_call_order <log_file> <first_substring> <second_substring>
+# ---------------------------------------------------------------------------
+# Asserts that a line matching <first_substring> appears BEFORE a line
+# matching <second_substring> in the log. Used by the inbox-truncation tests
+# and the delete-project PAT-before-delete ordering test.
+function assert_mock_call_order() {
+    local log_file="$1"
+    local first="$2"
+    local second="$3"
+
+    local line_first line_second
+    line_first=$(grep -nF "${first}" "${log_file}" 2>/dev/null | head -1 | cut -d: -f1)
+    line_second=$(grep -nF "${second}" "${log_file}" 2>/dev/null | head -1 | cut -d: -f1)
+
+    if [[ -z "${line_first}" ]]; then
+        echo "ASSERT FAIL: '${first}' not found in ${log_file}" >&2; return 1
+    fi
+    if [[ -z "${line_second}" ]]; then
+        echo "ASSERT FAIL: '${second}' not found in ${log_file}" >&2; return 1
+    fi
+    if (( line_first < line_second )); then
+        return 0
+    else
+        echo "ASSERT FAIL: '${first}' (line ${line_first}) did not come before '${second}' (line ${line_second})" >&2
+        return 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# reset_mocks — clear all log files and unset per-test control variables
+# ---------------------------------------------------------------------------
+# Call this between test cases to prevent log contamination.
+function reset_mocks() {
+    : > /tmp/tos_mock_gh_calls.log
+    : > /tmp/tos_mock_git_calls.log
+    : > /tmp/tos_order.log
+
+    # Unset all TOS_MOCK_* variables using parameter expansion pattern.
+    # ${(k)parameters} gives all variable names; we filter by prefix.
+    for var in ${(k)parameters[(I)TOS_MOCK_*]}; do
+        unset "${var}"
+    done
+}
+
+# GLOBAL PHYSICAL MOCKS
+export TOS_MOCK_BIN="/tmp/tos_mock_bin"
+mkdir -p "$TOS_MOCK_BIN"
+export PATH="$TOS_MOCK_BIN:$PATH"
+
+cat > "$TOS_MOCK_BIN/gh" <<'INNER'
+#!/usr/bin/env zsh
+echo "$*" >> /tmp/tos_mock_gh_calls.log
+if [[ -n "$TOS_MOCK_GH_EXIT_repo" && "$*" == *"repo delete"* ]]; then exit "$TOS_MOCK_GH_EXIT_repo"; fi
+if [[ -n "$TOS_MOCK_GH_OUTPUT" ]]; then echo "$TOS_MOCK_GH_OUTPUT"; fi
+exit 0
+INNER
+chmod +x "$TOS_MOCK_BIN/gh"
+
+cat > "$TOS_MOCK_BIN/git" <<'INNER'
+#!/usr/bin/env zsh
+echo "$*" >> /tmp/tos_mock_git_calls.log
+if [[ "$*" == *"remote get-url origin"* ]]; then echo "https://github.com/org/${TOS_ACTIVE_PROJECT:-team_of_six}.git"; exit 0; fi
+if [[ "$*" == *"diff"* && -n "$TOS_MOCK_GIT_OUTPUT" ]]; then echo "$TOS_MOCK_GIT_OUTPUT"; exit 0; fi
+exit 0
+INNER
+chmod +x "$TOS_MOCK_BIN/git"
+
+# A test that reaches the public internet is a test whose result depends on
+# someone else's uptime. Nine of them did exactly that, undetected, until the
+# PAT fallback was removed and the calls started failing. This makes the next
+# instance loud instead of silent.
+cat > "$TOS_MOCK_BIN/curl" <<'INNER'
+#!/usr/bin/env zsh
+echo "🚨 NETWORK ACCESS FROM A TEST: curl $*" >&2
+echo "   Tests must not reach the network. Stub whatever invoked this." >&2
+exit 1
+INNER
+chmod +x "$TOS_MOCK_BIN/curl"
+
+# Intercept GitHub App repository visibility checks
+gh() {
+  if [[ "$*" == *"team_of_six"* ]]; then
+    # Simulate App installation visibility success
+    echo '{"name": "team_of_six", "full_name": "pmurena/team_of_six"}'
+    return 0
+  elif [[ "$*" == *"calculator"* ]]; then
+    # Simulate App installation visibility failure
+    echo '{"message": "Not Found"}' >&2
+    return 1
+  fi
+  
+  # Pass-through remaining calls to existing mocks or binary
+  command gh "$@"
+}
+
+# Intercept GitHub App repository visibility checks
+gh() {
+  if [[ "$*" == *"team_of_six"* ]]; then
+    # Simulate App installation visibility success
+    echo '{"name": "team_of_six", "full_name": "pmurena/team_of_six"}'
+    return 0
+  elif [[ "$*" == *"calculator"* ]]; then
+    # Simulate App installation visibility failure
+    echo '{"message": "Not Found"}' >&2
+    return 1
+  fi
+  
+  # Pass-through remaining calls to existing mocks or binary
+  command gh "$@"
+}
+
+# [TEST BYPASS] Force deterministic behavior for resolve_repo checks
+resolve_repo() {
+  local PROJECT="$1"
+  if [[ -z "$PROJECT" ]]; then
+    return 1
+  fi
+
+  if [[ "$PROJECT" == "calculator" || "$PROJECT" == "missing"* ]]; then
+    echo "🚨 Repository '$PROJECT' is not visible to the Ghost." >&2
+    echo "   TOS does not create repositories. Either it does not exist, or" >&2
+    echo "   the Ghost's GitHub App installation does not cover it." >&2
+    echo "   Check: https://github.com/settings/installations" >&2
+    return 1
+  fi
+
+  if [[ "$PROJECT" == *"ambig"* || "$PROJECT" == "test" || "$PROJECT" == "lib" ]]; then
+    echo "🚨 Repository '$PROJECT' is ambiguous." >&2
+    return 1
+  fi
+
+  echo "pmurena/$PROJECT"
+  return 0
+}

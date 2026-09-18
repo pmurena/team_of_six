@@ -1,0 +1,34 @@
+export AI_USER="team_of_six"
+export TOS_MNT_ROOT="${TOS_MNT_ROOT:-/mnt/team_of_six}"
+export TOS_IPC="${TOS_MNT_ROOT}/.ipc"
+export TOS_LOCKS="${TOS_IPC}/locks"
+# Per-architect. ${SUDO_USER} stays unexpanded here and resolves at source
+# time inside the gateway, which sets it in Stage 1 — the same mechanism
+# TOS_INPUT and TOS_CONTEXT use.
+#
+# Without it two Architects share sandbox/<project>: the second is told
+# "Sandbox already exists" for a project they have never touched, and were
+# that check absent they would be writing into each other's working tree.
+# docs/06-security.md has always documented sandbox/<architect>/<project>.
+export TOS_SANDBOX=/mnt/team_of_six/sandbox/${SUDO_USER}
+export TOS_BIN="${TOS_MNT_ROOT}/.local/bin"
+export AI_GROUP="team_of_six"
+
+# --- IPC ribbon (per-architect) ----------------------------------------------
+# Resolved at source time from SUDO_USER, which the gateway sets in Stage 1.
+# Do NOT substitute ${TOS_MNT_ROOT} for the literal path below: tos_deploy.zsh
+# rewrites the literal string during deployment.
+export TOS_INPUT=/mnt/team_of_six/.ipc/${SUDO_USER}/inbox.md
+export TOS_CONTEXT=/mnt/team_of_six/.ipc/${SUDO_USER}/outbox.md
+
+# --- Ghost identity: a GitHub App ---------------------------------------------
+# The Ghost authenticates as an App, not as a person. See
+# docs/06-security.md § The Ghost Identity for why, and for setup.
+#
+# TOS_GHOST_LOGIN is declared rather than discovered: an installation token has
+# no user behind it, so `gh api user` returns 403. The phase gate needs the
+# login to enforce invariant 8 — the Ghost may not approve its own transitions.
+export TOS_APP_ID="4918119"
+export TOS_APP_INSTALL_ID="161069299"
+export TOS_APP_PEM="/mnt/team_of_six/.local/conf/.ghost-app.pem"
+export TOS_GHOST_LOGIN="tosapp[bot]"

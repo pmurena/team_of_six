@@ -1,0 +1,39 @@
+#!/usr/bin/env zunit
+
+
+@setup {
+  source "${PWD}/tests/shared/sandbox_toolkit.zsh"
+  sandbox_provision
+}
+
+@teardown {
+  sandbox_destroy
+}
+
+
+@test 'Path: TOS_ROOT points to a temporary sandbox' {
+  # Use a regex match assertion to satisfy ZUnit
+  assert "$TOS_ROOT" matches '/tmp/tos_test_'
+}
+
+@test 'Path: Gateway binary exists in the sandbox' {
+  assert "$TOS_ROOT/bin/tos.zsh" is_executable
+}
+
+@test 'Path: Configuration file is mirrored' {
+  assert "$TOS_ROOT/conf/config" is_file
+}
+
+# The gateway takes TOS_MNT_ROOT from the environment when it is already set.
+# /etc/profile.d/tos.sh sets it in every login shell, so without an explicit
+# export here the whole suite runs against the production control plane while
+# appearing to be sandboxed. Assert the isolation directly.
+@test 'Path: TOS_MNT_ROOT is isolated to the sandbox' {
+  assert "$TOS_MNT_ROOT" matches '/tmp/tos_test_'
+}
+
+@test 'Path: gateway resolves the sandboxed config, not production' {
+  local probe
+  probe=$( source "$TOS_ROOT/conf/config"; print -r -- "$TOS_LOCKS" )
+  assert "$probe" matches '/tmp/tos_test_'
+}

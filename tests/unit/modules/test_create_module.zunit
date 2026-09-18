@@ -1,0 +1,114 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/integration/test_create_module.zunit
+# =============================================================================
+
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    
+    scaffold_setUp
+    reset_mocks
+
+    _FIXTURES="${PWD}/tests/shared/payloads"
+
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:/usr/local/bin:/usr/bin:/bin:$PATH"
+
+    cat > "${TOS_MOCK_BIN}/git" <<'INNEREOF'
+#!/usr/bin/env zsh
+echo "$*" >> /tmp/tos_mock_git_calls.log
+if [[ "$*" == *"remote get-url origin"* ]]; then
+    echo "https://github.com/org/team_of_six.git"
+    exit 0
+fi
+exit 0
+INNEREOF
+    chmod +x "${TOS_MOCK_BIN}/git"
+
+    cat > "${TOS_MOCK_BIN}/gh" <<'INNEREOF'
+#!/usr/bin/env zsh
+echo "$*" >> /tmp/tos_mock_gh_calls.log
+if [[ "$1" == "repo" && "$2" == "view" && -n "$TOS_MOCK_GH_EXIT_view" ]]; then exit "$TOS_MOCK_GH_EXIT_view"; fi
+if [[ -n "$TOS_MOCK_GH_OUTPUT" ]]; then echo "$TOS_MOCK_GH_OUTPUT"; fi
+exit 0
+INNEREOF
+    chmod +x "${TOS_MOCK_BIN}/gh"
+
+    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+
+    export TOS_OUTBOX="${TOS_MNT_ROOT}/.ipc/test_architect/outbox.md"
+    touch "${TOS_OUTBOX}"
+
+    export TOS_INBOX="${TOS_MNT_ROOT}/.ipc/test_architect/inbox.md"
+    touch "${TOS_INBOX}"
+
+    export TOS_CONTEXT="/dev/null"
+    
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
+    export TOS_ACTIVE_TRINITY="0"
+}
+
+@teardown {
+    scaffold_tearDown
+    rm -rf "${TOS_MOCK_BIN}" 2>/dev/null
+}
+
+@test '[write issue — positive] ISSUE block triggers gh issue create' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    scaffold_write_inbox "${_FIXTURES}/valid_issue.md"
+    export TOS_MOCK_GH_OUTPUT='{"number":2}'
+
+    local output
+    local exit_code=0
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write issue 2>&1) || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
+
+    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
+    [[ "$gh_log" == *"issue create"* ]] && assert 1 equals 1 || fail "gh issue create not called"
+}
+
+@test '[write issue — negative] ISSUE block without TITLE gracefully skips' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_ISSUE_START===
+BODY=No title provided here.
+===TOS_ISSUE_END===
+PAYLOAD
+
+    local output
+    local exit_code=0
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six write issue 2>&1) || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway aborted unexpectedly: ${output}"; fi
+
+    if echo "${output}" | grep -qi "Skipping malformed issue block"; then
+        assert 1 equals 1
+    else
+        fail "Expected skip warning but got: \n${output}"
+    fi
+
+    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
+    [[ "$gh_log" == *"issue create"* ]] && fail "gh issue create called despite missing title"
+    assert 1 equals 1
+}
+
+@test '[create trinity — positive] Creates branch and Draft PR linked to issue' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    export TOS_MOCK_GH_OUTPUT='{"number":1,"url":"https://github.com/org/team_of_six/pull/1"}'
+
+    local output
+    local exit_code=0
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six create trinity 1 2>&1) || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Gateway failed unexpectedly: ${output}"; fi
+
+    local git_log=$(cat /tmp/tos_mock_git_calls.log 2>/dev/null || echo "")
+    [[ "$git_log" == *"tos-work-1"* ]] && assert 1 equals 1 || fail "Branch tos-work-1 not created"
+
+    local gh_log=$(cat /tmp/tos_mock_gh_calls.log 2>/dev/null || echo "")
+    [[ "$gh_log" == *"pr create"* && "$gh_log" == *"--draft"* ]] && assert 1 equals 1 || fail "Draft PR not created"
+}

@@ -1,0 +1,7 @@
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+TITLE=Close baseline
+BODY=Removing sandbox.
+CONFIRM=TRUE
+===TOS_META_END===

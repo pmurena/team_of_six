@@ -1,0 +1,75 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/unit/test_lock_verify.zunit
+# =============================================================================
+
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    scaffold_setUp
+    
+    export TOS_CONTEXT="/dev/null"
+}
+
+@teardown {
+    scaffold_tearDown
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — Verify confirms a valid lock owned by this architect
+# ---------------------------------------------------------------------------
+@test 'Verify confirms a valid HARD_LOCK owned by the calling architect' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK"
+    assert "$?" equals "0"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — Verify fails when lock is owned by a different architect
+# ---------------------------------------------------------------------------
+@test 'Verify fails when lock is owned by a different architect' {
+    echo "architect_b:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+
+    local exit_code=0
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK" || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert "1" equals "1"
+    else
+        fail "Expected verification to fail for different architect, but it passed."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Verify fails when lock type does not match
+# ---------------------------------------------------------------------------
+@test 'Verify fails when lock type does not match expected' {
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+
+    local exit_code=0
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK" || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert "1" equals "1"
+    else
+        fail "Expected verification to fail for lock type mismatch, but it passed."
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# TEST 4 — Verify fails when no lock file exists
+# ---------------------------------------------------------------------------
+@test 'Verify fails when no lock file exists for the given slot' {
+    # Ensure clean state — no lock file.
+    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+
+    local exit_code=0
+    zsh bin/utils/lock/verify.zsh "team_of_six" "1" "test_architect" "HARD_LOCK" || exit_code=$?
+
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert "1" equals "1"
+    else
+        fail "Expected verification to fail when no lock file exists, but it passed."
+    fi
+}

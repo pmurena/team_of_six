@@ -1,0 +1,11 @@
+#!/usr/bin/env zsh
+if [[ "$*" == *"team_of_six"* ]]; then
+  echo '{"name": "team_of_six", "full_name": "pmurena/team_of_six", "id": 123456789}'
+  exit 0
+elif [[ "$*" == *"calculator"* ]]; then
+  echo '{"message": "Not Found"}' >&2
+  exit 1
+fi
+# Default success schema for unhandled generic API checks
+echo '{"message": "success", "token": "mock-token", "repositories": []}'
+exit 0

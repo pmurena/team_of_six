@@ -1,0 +1,19 @@
+#!/usr/bin/env zsh
+if [[ "$*" == *"team_of_six"* ]]; then
+  # Gracefully handle `curl -w "%{http_code}"` extraction patterns
+  if [[ "$*" == *"%{http_code}"* ]]; then
+    echo '{"name": "team_of_six", "full_name": "pmurena/team_of_six"}200'
+  else
+    echo '{"name": "team_of_six", "full_name": "pmurena/team_of_six"}'
+  fi
+  exit 0
+elif [[ "$*" == *"calculator"* ]]; then
+  if [[ "$*" == *"%{http_code}"* ]]; then
+    echo '{"message": "Not Found"}404'
+  else
+    echo '{"message": "Not Found"}' >&2
+  fi
+  exit 1
+fi
+# Pass-through for non-GitHub calls
+command curl "$@"

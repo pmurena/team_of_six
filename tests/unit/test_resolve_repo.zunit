@@ -1,0 +1,65 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# tests/unit/test_resolve_repo.zunit
+# =============================================================================
+# The resolver turns a bare project name into owner/name by asking the App
+# installation what it can see. The logic worth testing is the counting: found,
+# not visible, and ambiguous. The mock returns the already-filtered list, since
+# gh applies the jq filter itself.
+# =============================================================================
+
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    scaffold_setUp
+
+    _R="${TOS_MNT_ROOT}/.local/bin/utils/resolve_repo.zsh"
+    export _RESOLVE_MOCK_BIN="/tmp/tos_resolve_bin_$$"
+    mkdir -p "$_RESOLVE_MOCK_BIN"
+    cat > "${_RESOLVE_MOCK_BIN}/gh" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"installation/repositories"* ]]; then
+    [[ -n "${MOCK_REPOS:-}" ]] && printf '%s\n' "${MOCK_REPOS}"
+    exit 0
+fi
+exit 0
+INNER
+    chmod +x "${_RESOLVE_MOCK_BIN}/gh"
+    export PATH="${_RESOLVE_MOCK_BIN}:$PATH"
+}
+
+@teardown {
+    rm -rf "$_RESOLVE_MOCK_BIN" 2>/dev/null
+    scaffold_tearDown
+}
+
+@test '[resolve — positive] A visible repository resolves to owner/name' {
+    export MOCK_REPOS="pmurena/calculator"
+    run zsh "$_R" calculator
+    assert "$state" equals 0
+    assert "$output" same_as "pmurena/calculator"
+}
+
+@test '[resolve — negative] A repository the installation cannot see is refused' {
+    export MOCK_REPOS=""
+    run zsh "$_R" calculator
+    if [[ "$state" -eq 0 ]]; then fail "Resolved a repository the Ghost cannot see"; fi
+    assert "$output" contains "is visible to the Ghost"
+}
+
+@test '[resolve — negative] An ambiguous name is refused, not guessed' {
+    # Two owners in one installation, same repository name. Taking the first
+    # would be a silent guess, which is the failure mode TOS exists to prevent.
+    export MOCK_REPOS="pmurena/calculator
+acme-corp/calculator"
+    run zsh "$_R" calculator
+    if [[ "$state" -eq 0 ]]; then fail "Guessed between two candidates"; fi
+    assert "$output" contains "ambiguous"
+    assert "$output" contains "acme-corp/calculator"
+}
+
+@test '[resolve — negative] A missing project name is refused' {
+    run zsh "$_R"
+    if [[ "$state" -eq 0 ]]; then fail "Accepted an empty project name"; fi
+    assert "$output" contains "missing project name"
+}

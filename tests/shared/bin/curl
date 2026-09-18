@@ -1,0 +1,17 @@
+#!/usr/bin/env zsh
+if [[ "$*" == *"team_of_six"* || "$*" == *"/installation/repositories"* || "$*" == *"access_tokens"* ]]; then
+    if [[ "$*" == *"%{http_code}"* ]]; then
+        echo '{"token":"mock","repositories":[{"name":"team_of_six","full_name":"pmurena/team_of_six"}]}200'
+    else
+        echo '{"token":"mock","repositories":[{"name":"team_of_six","full_name":"pmurena/team_of_six"}]}'
+    fi
+    exit 0
+elif [[ "$*" == *"calculator"* ]]; then
+    if [[ "$*" == *"%{http_code}"* ]]; then
+        echo '{"message":"Not Found"}404'
+    else
+        echo '{"message":"Not Found"}' >&2
+    fi
+    exit 1
+fi
+command curl "$@"

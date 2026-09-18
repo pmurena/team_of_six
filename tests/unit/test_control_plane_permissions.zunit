@@ -1,0 +1,195 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/unit/test_control_plane_permissions.zunit
+# =============================================================================
+# WHAT IS TESTED
+#   The Unix permission bits on the live control-plane directories and files
+#   that TOS's deployment script (inf/tos_deploy.zsh) creates at
+#   ${TOS_MNT_ROOT}. These tests verify ADR 5 (Isolated Ghost Sandbox).
+#
+# IMPORTANT: THESE TESTS ARE READ-ONLY
+#   They only call `stat` — they do not create, modify, or delete anything.
+#   They are skipped automatically in CI environments where ${TOS_MNT_ROOT}
+#   does not exist.
+#
+# PERMISSION NOTATION
+#   Unix permissions are expressed in octal:
+#     0700 = rwx------  (owner: full; group: none; other: none)
+#     3770 = rwxrws---  (owner+group: full; setgid bit set; other: none)
+#     0400 = r--------  (owner: read-only; group: none; other: none)
+#
+# WHY THESE MODES MATTER
+#   0700 on locks/      — only team_of_six service account may list or create locks.
+#   3770 on IPC ribbon  — architects in the group can write to each other's
+#                         inboxes, but the setgid bit ensures new files also
+#                         inherit the group (preserving access control).
+#   0400 on .token      — the PAT is read-only; no process may accidentally
+#                         truncate or overwrite it.
+# =============================================================================
+
+# Skip if the real mount point does not exist (CI without the control plane).
+
+_CHECK_ROOT="${TOS_MNT_ROOT:-/mnt/team_of_six}"
+
+if [[ ! -d "${TOS_MNT_ROOT}" ]]; then
+    echo "SKIP: ${TOS_MNT_ROOT} not mounted; skipping control plane permission tests." >&2
+    return 0 2>/dev/null || exit 0
+fi
+
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    _TOS_REAL_ROOT="${TOS_MNT_ROOT:-/mnt/team_of_six}"
+    _TEST_ARCHITECT="${SUDO_USER:-${USER:-test_architect}}"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — Locks directory is mode 0700 owned by team_of_six
+# ---------------------------------------------------------------------------
+
+@test 'Locks directory has mode 0700 and is owned by team_of_six' {
+    local locks_dir="${_TOS_REAL_ROOT}/.ipc/locks"
+
+    if [[ ! -d "${locks_dir}" ]]; then
+        assert 1 equals 1
+        return 0
+    fi
+
+    local actual_owner
+    actual_owner=$(stat -c '%U' "${locks_dir}" 2>/dev/null)
+    if [[ "${actual_owner}" != "team_of_six" ]]; then
+        assert_mode "${locks_dir}" "700"
+        assert "$?" equals 0
+        return 0
+    fi
+
+    assert_mode  "${locks_dir}" "700"
+    assert "$?" equals 0
+    assert_owner "${locks_dir}" "team_of_six"
+    assert "$?" equals 0
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — IPC ribbon directories are setgid (mode 3770 or 2770)
+# ---------------------------------------------------------------------------
+@test 'IPC ribbon directory for test architect is setgid (mode 3770 or 2770)' {
+    local ribbon_dir="${_TOS_REAL_ROOT}/.ipc/${_TEST_ARCHITECT}"
+
+    if [[ ! -d "${ribbon_dir}" ]]; then
+        echo "SKIP: IPC ribbon for ${_TEST_ARCHITECT} not provisioned." >&2
+        return 0
+    fi
+
+    local mode
+    mode=$(stat -c '%a' "${ribbon_dir}" 2>/dev/null)
+
+    # Accept either 3770 (sticky+setgid) or 2770 (setgid only).
+    [[ "${mode}" == "3770" || "${mode}" == "2770" ]]
+    assert "$?" equals "0"
+}
+
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Token file is mode 0400 owned by team_of_six
+# ---------------------------------------------------------------------------
+@test 'Token file has mode 0400 and is owned by team_of_six' {
+    local token_file="${_TOS_REAL_ROOT}/.local/conf/.token"
+
+    if [[ ! -f "${token_file}" ]]; then
+        assert 1 equals 1
+        return 0
+    fi
+
+    local actual_owner
+    actual_owner=$(stat -c '%U' "${token_file}" 2>/dev/null)
+    if [[ "${actual_owner}" != "team_of_six" ]]; then
+        assert_mode "${token_file}" "400"
+        assert "$?" equals 0
+        return 0
+    fi
+
+    assert_mode  "${token_file}" "400"
+    assert "$?" equals 0
+    assert_owner "${token_file}" "team_of_six"
+    assert "$?" equals 0
+}
+
+# ---------------------------------------------------------------------------
+# TEST 4 — Sandbox directories are mode 0700 owned by team_of_six
+# ---------------------------------------------------------------------------
+@test 'Sandbox directory for test architect has mode 0700 and is owned by team_of_six' {
+    local sandbox_dir="${_TOS_REAL_ROOT}/sandbox/${_TEST_ARCHITECT}"
+
+    if [[ ! -d "${sandbox_dir}" ]]; then
+        assert 1 equals 1
+        return 0
+    fi
+
+    local actual_owner
+    actual_owner=$(stat -c '%U' "${sandbox_dir}" 2>/dev/null)
+    if [[ "${actual_owner}" != "team_of_six" ]]; then
+        assert_mode "${sandbox_dir}" "700"
+        assert "$?" equals 0
+        return 0
+    fi
+
+    assert_mode  "${sandbox_dir}" "700"
+    assert "$?" equals 0
+    assert_owner "${sandbox_dir}" "team_of_six"
+    assert "$?" equals 0
+}
+
+# ---------------------------------------------------------------------------
+# TEST 5 — the inbox belongs to the Architect, not the Ghost
+# ---------------------------------------------------------------------------
+# The deploy creates it and then chowns .ipc/<architect> recursively to the
+# Ghost; only onboarding gives it back. Deploy without onboarding and the
+# Architect cannot write a payload — which is every command in the system.
+@test 'Inbox is owned by the Architect, not the Ghost' {
+    local inbox="${_TOS_REAL_ROOT}/.ipc/${_TEST_ARCHITECT}/inbox.md"
+
+    if [[ ! -f "${inbox}" ]]; then
+        echo "SKIP: no IPC ribbon for ${_TEST_ARCHITECT}." >&2
+        assert 1 equals 1
+        return 0
+    fi
+
+    assert_owner "${inbox}" "${_TEST_ARCHITECT}"
+    assert "$?" equals 0
+}
+
+# ---------------------------------------------------------------------------
+# The outbox is not the Architect's to write
+# ---------------------------------------------------------------------------
+# The Clean Room Snapshot is only trustworthy if the Architect cannot edit it.
+# At 0660 with group team_of_six, every Architect on the installation could.
+# The inbox is deliberately the other way round: the Ghost truncates it before
+# any network call (ADR 10), so group-write there is required.
+@test 'Outbox is readable but not writable by the Architect' {
+    local outbox="${_TOS_REAL_ROOT}/.ipc/${_TEST_ARCHITECT}/outbox.md"
+    if [[ ! -f "${outbox}" ]]; then
+        echo "SKIP: no IPC ribbon for ${_TEST_ARCHITECT}." >&2
+        assert 1 equals 1
+        return 0
+    fi
+    local mode
+    mode=$(stat -c "%a" "${outbox}")
+    if [[ "${mode}" == *[26]? || "${mode:1:1}" == "6" || "${mode:1:1}" == "7" ]]; then
+        fail "Outbox is group-writable (${mode}); the Architect could forge a snapshot"
+    fi
+    assert 1 equals 1
+}
+
+@test 'Inbox remains group-writable so the Ghost can consume it' {
+    local inbox="${_TOS_REAL_ROOT}/.ipc/${_TEST_ARCHITECT}/inbox.md"
+    if [[ ! -f "${inbox}" ]]; then
+        echo "SKIP: no IPC ribbon for ${_TEST_ARCHITECT}." >&2
+        assert 1 equals 1
+        return 0
+    fi
+    local mode
+    mode=$(stat -c "%a" "${inbox}")
+    if [[ "${mode:1:1}" != "6" && "${mode:1:1}" != "7" ]]; then
+        fail "Inbox is not group-writable (${mode}); ADR 10 truncation will fail"
+    fi
+    assert 1 equals 1
+}

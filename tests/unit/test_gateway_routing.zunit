@@ -1,0 +1,154 @@
+#!/usr/bin/env zunit
+# =============================================================================
+# test/unit/test_gateway_routing.zunit
+# =============================================================================
+
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+
+    scaffold_setUp
+    reset_mocks
+
+    # Force the gateway to write to a real file so we can inspect it safely
+    export TOS_CONTEXT="/tmp/tos_test_out.log"
+    export TOS_MODULE_BASE="${TOS_MNT_ROOT}/.local/bin/modules"
+    export TOS_ACTIVE_TRINITY="0"
+
+    _dummy_soft="${TOS_MNT_ROOT}/.local/bin/modules/dummy/soft"
+    _dummy_hard="${TOS_MNT_ROOT}/.local/bin/modules/dummy/hard"
+    mkdir -p "${_dummy_soft}" "${_dummy_hard}"
+
+    cat > "${_dummy_soft}/action.zsh" <<'SCRIPT'
+#!/bin/zsh
+echo "DUMMY_EXECUTED"
+exit 0
+SCRIPT
+    chmod +x "${_dummy_soft}/action.zsh"
+
+    cat > "${_dummy_hard}/action.zsh" <<'SCRIPT'
+#!/bin/zsh
+echo "HARD_EXECUTED"
+exit 0
+SCRIPT
+    chmod +x "${_dummy_hard}/action.zsh"
+
+    cat > "${_dummy_hard}/hard_action.zsh" <<'SCRIPT'
+#!/bin/zsh
+echo "HARD_ACTION_EXECUTED"
+exit 0
+SCRIPT
+    chmod +x "${_dummy_hard}/hard_action.zsh"
+}
+
+@teardown {
+    scaffold_tearDown
+    rm -f /tmp/tos_test_out.log
+}
+
+# ---------------------------------------------------------------------------
+# TEST 1 — Dynamic routing: gateway discovers and executes a soft module
+# ---------------------------------------------------------------------------
+@test 'Dynamic routing discovers and executes a soft module by filesystem path' {
+    export TOS_ACTIVE_TRINITY="0"
+    rm -f "$TOS_CONTEXT"
+
+    local output
+    local exit_code=0
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six dummy action 2>&1) || exit_code=$?
+
+    # Fallback: Read the file that `tee` wrote to
+    local log_content=""
+    if [[ -f "$TOS_CONTEXT" ]]; then
+        log_content=$(cat "$TOS_CONTEXT")
+    fi
+
+    # Check both the shell output and the physical log file
+    if echo "${output}" | grep -qF "DUMMY_EXECUTED" || echo "${log_content}" | grep -qF "DUMMY_EXECUTED"; then
+        assert "1" equals "1"
+    else
+        local flat_output="${output//$'\n'/ | }"
+        local flat_log="${log_content//$'\n'/ | }"
+        fail "DUMMY_EXECUTED missing. exit=${exit_code} Output: ${flat_output} Log: ${flat_log}"
+    fi
+
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log  "dummy"
+    assert_mock_not_called /tmp/tos_mock_git_calls.log "dummy"
+}
+
+# ---------------------------------------------------------------------------
+# TEST 2 — Hard-lock enforcement: hard/ module rejected when Trinity is 0
+# ---------------------------------------------------------------------------
+@test 'Hard-lock enforcement: hard/ module rejected when Trinity is 0' {
+    export TOS_ACTIVE_TRINITY="0"
+    local output
+    local exit_code=0
+    output=$(TOS_ACTIVE_TRINITY=0 zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six dummy hard_action 2>&1) || exit_code=$?
+
+    if [[ "${exit_code}" -eq 0 ]]; then
+        fail "Expected non-zero exit code. Output: ${output}"
+    fi
+
+    if echo "${output}" | grep -qF "HARD_EXECUTED"; then
+        fail "Unexpectedly found HARD_EXECUTED in output: ${output}"
+    fi
+
+    if echo "${output}" | grep -qi "soft\|trinity 0\|hard lock\|lock required"; then
+        assert "1" equals "1"
+    else
+        local flat_output="${output//$'\n'/ | }"
+        fail "Did not find rejection message. Output was: ${flat_output}"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# TEST 3 — Hard-lock execution succeeds when Trinity > 0
+# ---------------------------------------------------------------------------
+@test 'Hard-lock execution succeeds when Trinity is greater than 0' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+    rm -f "$TOS_CONTEXT"
+
+    local output
+    local exit_code=0
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six dummy hard_action 2>&1) || exit_code=$?
+
+    # Fallback: Read the file that `tee` wrote to
+    local log_content=""
+    if [[ -f "$TOS_CONTEXT" ]]; then
+        log_content=$(cat "$TOS_CONTEXT")
+    fi
+
+    if echo "${output}" | grep -qF "HARD_ACTION_EXECUTED" || echo "${log_content}" | grep -qF "HARD_ACTION_EXECUTED"; then
+        assert "1" equals "1"
+    else
+        local flat_output="${output//$'\n'/ | }"
+        local flat_log="${log_content//$'\n'/ | }"
+        fail "HARD_ACTION_EXECUTED missing. exit=${exit_code} Output: ${flat_output} Log: ${flat_log}"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# TEST 4 — Unknown module/action returns non-zero and an informative error
+# ---------------------------------------------------------------------------
+@test 'Unknown module and action returns non-zero with informative error' {
+    local output
+    local exit_code=0
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six nonexistent thing 2>&1) || exit_code=$?
+
+    if [[ "${exit_code}" -eq 0 ]]; then
+        fail "Expected non-zero exit code. Output: ${output}"
+    fi
+
+    # The gateway naturally calls 'git remote' in Stage 3b, so we only 
+    # strictly verify that the 'gh' mock was not triggered.
+    assert_mock_not_called /tmp/tos_mock_gh_calls.log "nonexistent"
+
+    if echo "${output}" | grep -qi "not found\|unknown\|no module\|invalid"; then
+        assert "1" equals "1"
+    else
+        local flat_output="${output//$'\n'/ | }"
+        fail "Did not find informative error. Output was: ${flat_output}"
+    fi
+}

@@ -1,0 +1,102 @@
+#!/usr/bin/env zunit
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    scaffold_setUp
+    reset_mocks
+    
+    _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+    mkdir -p "${_SANDBOX_PROJECT}"
+}
+
+@teardown { 
+    scaffold_tearDown
+}
+
+@test '[close trinity — positive] Squash merges PR, cleans branch and lock' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    echo "calculator.zsh" > "${TOS_LOCKS}/team_of_six_trinity_1.manifest"
+    export TOS_ACTIVE_TRINITY="1"
+    
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+CONFIRM=TRUE
+===TOS_META_END===
+PAYLOAD
+
+    export TOS_MOCK_GH_OUTPUT='{"state":"OPEN","number":1}'
+
+    local exit_code=0
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
+    assert "${exit_code}" equals 0
+    assert_mock_called /tmp/tos_mock_gh_calls.log "pr merge"
+    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+}
+
+@test '[close trinity — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+===TOS_META_END===
+PAYLOAD
+    
+    local exit_code=0
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close trinity 1 >/dev/null 2>&1 || exit_code=$?
+    if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
+}
+
+@test '[close project — positive] Removes sandbox directory; leaves GitHub remote intact' {
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
+    export TOS_ACTIVE_TRINITY="0"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+CONFIRM=TRUE
+===TOS_META_END===
+PAYLOAD
+
+    local exit_code=0
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close project >/dev/null 2>&1 || exit_code=$?
+    assert "${exit_code}" equals 0
+    assert_dir_not_exists "${_SANDBOX_PROJECT}"
+}
+
+@test '[close project — negative] Hard lock still active blocks close project' {
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+CONFIRM=TRUE
+===TOS_META_END===
+PAYLOAD
+
+    local exit_code=0
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close project >/dev/null 2>&1 || exit_code=$?
+    if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
+    assert_dir_exists "${_SANDBOX_PROJECT}"
+}
+
+@test '[close project — negative, no CONFIRM] Absent CONFIRM=TRUE halts immediately' {
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
+    export TOS_ACTIVE_TRINITY="0"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+===TOS_META_END===
+PAYLOAD
+
+    local exit_code=0
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six close project >/dev/null 2>&1 || exit_code=$?
+    if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
+    assert_dir_exists "${_SANDBOX_PROJECT}"
+}

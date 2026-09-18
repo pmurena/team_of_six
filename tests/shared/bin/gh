@@ -1,0 +1,6 @@
+#!/usr/bin/env zsh
+if [[ "$*" == *"installation/repositories"* ]]; then
+    echo "pmurena/team_of_six"
+    exit 0
+fi
+exit 0

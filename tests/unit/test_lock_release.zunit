@@ -1,0 +1,44 @@
+#!/usr/bin/env zunit
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    scaffold_setUp
+}
+@teardown { scaffold_tearDown; }
+
+@test 'Release by owner removes the lock file' {
+    export SUDO_USER="test_architect"
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/utils/lock/release.zsh "team_of_six" 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -eq 0 ]]; then assert 1 equals 1; else fail "Failed. Output: ${output}"; fi
+    assert_file_not_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+}
+
+@test 'Release by non-owner fails and leaves lock intact' {
+    export SUDO_USER="test_architect"
+    echo "other_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    
+    local output
+    local exit_code=0
+    output=$(zsh bin/utils/lock/release.zsh "team_of_six" 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -ne 0 ]]; then
+        assert 1 equals 1
+    else
+        fail "Expected non-zero exit code. Output: ${output}"
+    fi
+    assert_file_exists "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+}
+
+@test 'Release of non-existent lock is a no-op and exits zero' {
+    export SUDO_USER="test_architect"
+    local output
+    local exit_code=0
+    output=$(zsh bin/utils/lock/release.zsh "team_of_six" 2>&1) || exit_code=$?
+    
+    if [[ "${exit_code}" -eq 0 ]]; then assert 1 equals 1; else fail "Failed. Output: ${output}"; fi
+}

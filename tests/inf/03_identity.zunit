@@ -1,0 +1,22 @@
+#!/usr/bin/env zunit
+
+
+@setup {
+  source "${PWD}/tests/shared/sandbox_toolkit.zsh"
+  sandbox_provision
+}
+
+@teardown {
+  sandbox_destroy
+}
+
+
+@test 'Identity: Sandbox files are owned by the current user' {
+  run stat -c "%U" "$TOS_ROOT/bin/tos.zsh"
+  assert "$output" same_as "$USER"
+}
+
+@test 'Identity: Path prioritization' {
+  run which tos.zsh
+  assert "$output" same_as "$TOS_ROOT/bin/tos.zsh"
+}

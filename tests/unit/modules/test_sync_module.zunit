@@ -1,0 +1,199 @@
+#!/usr/bin/env zunit
+@setup {
+    source "${PWD}/tests/shared/zunit_helpers/scaffold.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/mocks.zsh"
+    source "${PWD}/tests/shared/zunit_helpers/assertions.zsh"
+    scaffold_setUp
+    reset_mocks
+    export TOS_LOCKS="${TOS_MNT_ROOT}/.ipc/locks"
+    export _SANDBOX_PROJECT="${TOS_SANDBOX}/team_of_six"
+    echo "test_architect:SOFT_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_0.lock"
+    export TOS_ACTIVE_TRINITY="0"
+}
+@teardown { scaffold_tearDown; }
+
+
+@test '[sync project — positive] Provisions sandbox, clones repo, acquires SOFT_LOCK' {
+    rm -rf "${_SANDBOX_PROJECT}"
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+===TOS_META_END===
+PAYLOAD
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
+
+    cat > "${TOS_MOCK_BIN}/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"clone"* ]]; then
+    # Respect the deployed sandbox path from the active test environment
+    target_dir="${TOS_SANDBOX:-${TOS_MNT_ROOT}/sandbox}/${TOS_ACTIVE_PROJECT:-team_of_six}"
+    mkdir -p "$target_dir"
+    exit 0
+fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/git"
+
+    cat > "${TOS_MOCK_BIN}/gh" <<'INNER'
+#!/usr/bin/env zsh
+# sync project derives the remote from GitHub rather than reading the
+# Architect's working directory (ADR: Pre-Escalation Caller Verification).
+if [[ "$*" == *"repo view"* ]]; then echo "test/team_of_six"; exit 0; fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/gh"
+
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six sync project >/dev/null 2>&1 || true
+
+    assert 1 equals 1
+    if [[ ! -d "${_SANDBOX_PROJECT}" ]]; then fail "Sandbox not provisioned"; fi
+}
+@test '[sync project — negative] Second call rejected when sandbox already exists' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+===TOS_META_END===
+PAYLOAD
+    local exit_code=0
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six sync project >/dev/null 2>&1 || exit_code=$?
+    if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
+}
+
+@test '[sync trinity — positive] Atomic Handover: push → release old lock → acquire new → snapshot' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+    
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+===TOS_META_END===
+PAYLOAD
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
+    cat > "${TOS_MOCK_BIN}/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
+if [[ "$*" == *"push"* ]]; then echo "called" > /tmp/tos_mock_git_push.log; exit 0; fi
+
+# The handover now asks how far ahead or behind the branch is before
+# deciding whether there is anything to preserve. Ahead by one, behind by
+# none — the case this test is about.
+if [[ "$*" == *"rev-list --count origin/"* ]]; then echo "1"; exit 0; fi
+if [[ "$*" == *"rev-list --count"* ]]; then echo "0"; exit 0; fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/git"
+    rm -f /tmp/tos_mock_git_push.log
+    
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six sync trinity 2 >/dev/null 2>&1 || true
+    
+    if [[ -f /tmp/tos_mock_git_push.log ]]; then assert 1 equals 1; else fail "Push not called"; fi
+    if [[ ! -f "${TOS_LOCKS}/team_of_six_trinity_2.lock" ]]; then fail "Lock 2 not acquired"; fi
+}
+
+@test '[sync trinity — negative] Push failure halts with no self-healing (ADR 11)' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
+    echo "test_architect:HARD_LOCK" > "${TOS_LOCKS}/team_of_six_trinity_1.lock"
+    export TOS_ACTIVE_TRINITY="1"
+    
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=1
+===TOS_META_END===
+PAYLOAD
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
+    cat > "${TOS_MOCK_BIN}/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
+if [[ "$*" == *"push"* ]]; then exit 1; fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/git"
+    local exit_code=0
+    zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six sync trinity 2 >/dev/null 2>&1 || exit_code=$?
+    if [[ "${exit_code}" -ne 0 ]]; then assert 1 equals 1; else fail "Expected non-zero exit code"; fi
+}
+
+@test '[sync trinity — handover] Syncing from Trinity 0 skips pushing tos-work-0' {
+    mkdir -p "${_SANDBOX_PROJECT}"
+    git -C "${_SANDBOX_PROJECT}" init >/dev/null 2>&1 || true
+    git -C "${_SANDBOX_PROJECT}" remote add origin git@github.com:test/repo.git >/dev/null 2>&1 || true
+    
+    # We are already on Trinity 0 (from @setup)
+    cat > "${TOS_INBOX}" <<'PAYLOAD'
+===TOS_META_START===
+TARGET_PROJECT=team_of_six
+TARGET_TRINITY=0
+===TOS_META_END===
+PAYLOAD
+
+    # The snapshot validates the phase in full before emitting PHASE=, and
+    # halts the sync if the record is missing. This test is about the handover
+    # not pushing tos-work-0, so the destination Trinity is given a record.
+    printf "current=red\nred=\ngreen=\nrefactor=\nretrospect=\n" > "${TOS_LOCKS}/team_of_six_trinity_1.phase"
+
+    export TOS_MOCK_BIN="/tmp/tos_mock_bin_$$"
+    mkdir -p "${TOS_MOCK_BIN}"
+    export PATH="${TOS_MOCK_BIN}:$PATH"
+    
+    # Mock git to catch the illegal push of tos-work-0
+    cat > "${TOS_MOCK_BIN}/git" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"remote get-url"* ]]; then echo "git@github.com:test/team_of_six.git"; exit 0; fi
+if [[ "$*" == *"push"* ]]; then 
+    echo "$*" > /tmp/tos_mock_git_push.log
+    if [[ "$*" == *"tos-work-0"* ]]; then exit 1; fi
+    exit 0
+fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/git"
+
+    # The validator resolves the repository, the PR and the Ghost login before
+    # it can report a phase. The generic mock returns empty output, which kills
+    # it before the handover under test happens.
+    cat > "${TOS_MOCK_BIN}/gh" <<'INNER'
+#!/usr/bin/env zsh
+if [[ "$*" == *"repo view"* ]]; then echo "test/team_of_six"; exit 0; fi
+if [[ "$*" == *"pr view"* ]]; then echo "7"; exit 0; fi
+if [[ "$1" == "api" && "$2" == "user" ]]; then echo "test_architect"; exit 0; fi
+exit 0
+INNER
+    chmod +x "${TOS_MOCK_BIN}/gh"
+
+    rm -f /tmp/tos_mock_git_push.log
+    
+    local exit_code=0
+    local output
+    output=$(zsh "${TOS_MNT_ROOT}/.local/bin/tos.zsh" team_of_six sync trinity 1 2>&1) || exit_code=$?
+    
+    # Check if the mock caught the bad push
+    if [[ -f /tmp/tos_mock_git_push.log ]]; then
+        local push_cmd=$(cat /tmp/tos_mock_git_push.log)
+        if [[ "$push_cmd" == *"tos-work-0"* ]]; then
+            fail "Module illegally attempted to push tos-work-0!"
+        fi
+    fi
+    
+    # It should cleanly transition to Trinity 1
+    if [[ "${exit_code}" -ne 0 ]]; then fail "Sync failed unexpectedly:\n$output"; fi
+    assert "$exit_code" equals 0
+    if [[ ! -f "${TOS_LOCKS}/team_of_six_trinity_1.lock" ]]; then fail "Lock 1 not acquired"; fi
+}

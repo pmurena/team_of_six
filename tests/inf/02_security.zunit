@@ -1,0 +1,68 @@
+#!/usr/bin/env zunit
+
+
+@setup {
+  source "${PWD}/tests/shared/sandbox_toolkit.zsh"
+  sandbox_provision
+}
+
+@teardown {
+  sandbox_destroy
+}
+
+
+# .token was retired with the PAT fallback. The App private key replaces it
+# and carries the same permission requirement: readable by the Ghost, by
+# nobody else. It is not itself a credential, but it mints them.
+@test 'Security: App private key has strict mode 0400' {
+  run stat -c "%a" "$TOS_ROOT/conf/.ghost-app.pem"
+  assert "$output" same_as "400"
+}
+
+@test 'Security: Config file has mode 0640' {
+  run stat -c "%a" "$TOS_ROOT/conf/config"
+  assert "$output" same_as "640"
+}
+
+@test 'Security: IPC ribbon directory is setgid (3770)' {
+  # Based on deploy log: ribbon is at $TOS_MNT_ROOT/.ipc/$USER
+  # $TOS_ROOT is $TOS_MNT_ROOT/.local, so we go up one level
+  run stat -c "%a" "$TOS_ROOT/../.ipc/$USER"
+  assert "$output" same_as "3770"
+}
+
+# A permission the security document claims but nothing checks is a
+# permission that drifts. These three were all left at 755 by the deploy and
+# nobody noticed, because a separate script happened to fix one of them.
+# sandbox/$USER holds the projects — TOS_SANDBOX resolves to it, and every
+# module creates $TOS_SANDBOX/$PROJECT_NAME inside. This assertion was written
+# against the same path before the config made it the used one, so it passed
+# while protecting nothing. It protects something now.
+@test 'Security: Sandbox is private to the Ghost (0700)' {
+  run stat -c "%a" "$TOS_ROOT/../sandbox/$USER"
+  assert "$output" same_as "700"
+}
+
+@test 'Security: TOS_SANDBOX is per-architect' {
+  local resolved
+  resolved=$( SUDO_USER=architect_a zsh -c "source '$TOS_ROOT/conf/config'; print -r -- \$TOS_SANDBOX" )
+  if [[ "$resolved" != *architect_a* ]]; then
+    fail "TOS_SANDBOX does not include the architect: $resolved"
+  fi
+  assert 1 equals 1
+}
+
+@test 'Security: Sandbox root is not world-readable (0750)' {
+  run stat -c "%a" "$TOS_ROOT/../sandbox"
+  assert "$output" same_as "750"
+}
+
+@test 'Security: Conf directory is not world-readable (0750)' {
+  run stat -c "%a" "$TOS_ROOT/conf"
+  assert "$output" same_as "750"
+}
+
+@test 'Security: Locks directory is private (0700)' {
+  run stat -c "%a" "$TOS_ROOT/../.ipc/locks"
+  assert "$output" same_as "700"
+}
