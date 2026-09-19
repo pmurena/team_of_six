@@ -1,6 +1,13 @@
 # Team of Six
 
-> *A secure, multi-tenant execution engine for AI-assisted software development.*
+*A secure, multi-tenant execution engine for AI-assisted software development.*
+
+> **A word of caution.** This is a thought experiment worked through to running
+> code. It has been used on several small private repositories and works there;
+> it has not been tested at scale. The premise is that governance rather than
+> prompting is the lever for LLM-assisted development on large codebases —
+> whether that holds beyond a few hundred lines is exactly the open question,
+> and I have not answered it.
 
 ---
 
@@ -79,28 +86,39 @@ See [06-security.md](docs/06-security.md) for full deployment instructions, incl
 ```
 team_of_six/
 ├── bin/
-│   ├── tos.zsh               # The Global Gateway
-│   └── modules/
-│       ├── create/           # Inception phase (project, trinity, issue)
-│       ├── sync/             # Alignment phase (start, trinity, peek)
-│       ├── write/            # Mutation phase (plan, code, comment, trinity)
-│       ├── close/            # Finality phase (project, trinity)
-│       └── delete/           # Purge phase (project, trinity)
-├── bin/utils/
-│   ├── lock/                 # Atomic lock management (acquire, release, verify, status)
-│   ├── error_trap.zsh
-│   ├── export_parsers.zsh
-│   └── parse_blocks.zsh
+│   ├── tos.zsh                     # The Global Gateway
+│   ├── modules/
+│   │   ├── create/                 # Inception — trinity
+│   │   ├── sync/                   # Alignment — project, trinity, peek
+│   │   ├── write/                  # Mutation — plan, code, comment, issue, phase, trinity
+│   │   ├── close/                  # Finality — project, trinity
+│   │   └── delete/                 # Purge — no actions (see ADR: TOS Does Not Create or Destroy Remotes)
+│   └── utils/
+│       ├── lock/                   # Atomic lock management (acquire, release, verify, status)
+│       ├── check_manifest_visa.zsh # Intent Lock enforcement
+│       ├── error_trap.zsh
+│       ├── export_parsers.zsh
+│       ├── flight_recorder.zsh
+│       ├── mint_app_token.zsh      # GitHub App installation token, minted per invocation
+│       ├── parse_blocks.zsh
+│       ├── phase_validate.zsh      # The phase gate's eight invariants
+│       └── resolve_repo.zsh        # Project name → owner/name via the App installation
 ├── conf/
-│   └── config                # Global configuration (paths, users, groups)
-├── docs/                     # This documentation
+│   └── config                      # Global configuration (paths, users, App identity)
+├── docs/                           # This documentation
+│   └── tutos/
+│       └── interactive_tutorial.zsh
 ├── governance/
-│   └── adr.md                # Architectural Decision Records
-├── inf/                      # Deployment and provisioning scripts
+│   ├── adr.md                      # Architectural Decision Records
+│   └── ipc_contracts.md            # Normative payload and response specification
+├── inf/                            # Deployment and provisioning scripts
 ├── llm_agents/
-│   └── code.md               # Agent rulefile — committed, versioned, evolved by Retrospective
+│   └── code.md                     # Agent rulefile — committed, versioned, evolved by Retrospective
 ├── plugins/
-│   └── neovim/               # Neovim integration plugin
-└── test/
-    └── interactive_tutorial.zsh
+│   └── neovim/
+├── tests/
+│   ├── inf/                        # Deployment and permission invariants
+│   ├── shared/                     # Harnesses, mocks, payload fixtures
+│   └── unit/                       # Module and utility tests
+└── LICENSE
 ```
